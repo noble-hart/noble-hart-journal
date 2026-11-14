@@ -1,0 +1,14 @@
+
+.git
+.git/**
+.wrangler
+.wrangler/**
+supabase
+supabase/**
+README.md
+.gitignore
+wrangler.jsonc
+.assetsignore
+_redirects
+node_modules
+node_modules/**
