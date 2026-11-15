@@ -75,3 +75,109 @@ a.gift-topic *, a.gift-topic:hover *, a.gift-topic:focus-visible * {text-decorat
 .comment-edit-form,.admin-edit-form {margin:12px 0;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}
 .comment-edit-form label {flex-basis:100%;font-weight:700}.comment-edit-form textarea,.admin-edit-form textarea {width:100%;min-height:95px}
 .contact-form-wrap{margin-top:34px} .contact-form-wrap form{display:grid;gap:14px}
+
+
+/* v9: Contact page — calm editorial two-column desktop, form-first on mobile */
+.contact-layout{display:grid;grid-template-columns:minmax(0,.84fr) minmax(0,1.16fr);align-items:start;gap:clamp(22px,4vw,56px);max-width:1160px}
+.contact-layout .contact-intro{order:1;min-width:0;padding:clamp(16px,2vw,26px) 0}
+.contact-layout .contact-intro h2{font-size:clamp(1.8rem,3vw,2.6rem);margin:12px 0 16px}
+.contact-layout .contact-intro p{line-height:1.75;color:var(--muted)}
+.contact-layout .contact-intro .contact-lead{font-size:1.07rem;color:#435a6b}
+.contact-email-card{margin:27px 0;background:#f0f6f5;border:1px solid #dbe9e4;padding:18px 20px;border-radius:14px;display:grid;gap:3px}
+.contact-info-label{font-weight:800;font-size:.74rem;color:#547461;letter-spacing:.08em;text-transform:uppercase}
+.contact-email-card a{font-weight:800;overflow-wrap:anywhere;text-decoration:none}
+.contact-email-card a:hover{text-decoration:underline}
+.contact-info-section{border-top:1px solid #e2e9ed;padding-top:19px;margin-top:19px}
+.contact-info-section h3{font-size:1.02rem;margin:0 0 5px}
+.contact-info-section p{margin:0;font-size:.94rem}
+.contact-small-note{font-size:.82rem;border-left:3px solid var(--gold);padding-left:12px;margin-top:24px}
+.contact-layout .contact-form-wrap{order:2;min-width:0;margin:0;padding:clamp(20px,3vw,36px);background:#fff;box-shadow:0 12px 35px rgba(23,54,93,.065);border:1px solid #dce6ed;border-radius:20px}
+.contact-layout .contact-form-wrap h2{font-size:clamp(1.55rem,2.5vw,2rem);margin:7px 0}
+.contact-layout .contact-form-wrap>p{font-size:.91rem;color:var(--muted);margin:0 0 22px}
+.contact-layout .contact-form-wrap label{font-size:.88rem;color:#2c435a;gap:7px}
+.contact-layout .contact-form-wrap .field{max-width:100%;width:100%;min-width:0}
+.contact-captcha-region{overflow-x:auto;max-width:100%;padding-bottom:3px}
+.contact-send-button{width:100%;border-radius:10px}
+.contact-privacy-note{font-size:.77rem!important;line-height:1.5;color:var(--muted);margin:0!important}
+.contact-privacy-note a{text-decoration:underline}
+#contact-message{font-size:.89rem}
+@media(max-width:860px){
+ .contact-layout{display:flex;flex-direction:column;gap:24px}
+ .contact-layout .contact-form-wrap{order:1;width:100%}
+ .contact-layout .contact-intro{order:2;width:100%;padding:4px 6px 0}
+}
+@media(max-width:520px){.contact-layout .contact-form-wrap{padding:19px 16px}.contact-fields{grid-template-columns:1fr}.contact-layout .contact-intro h2{font-size:1.7rem}}
+
+
+/* v10: Refined editorial hover interactions for article cards and top navigation. */
+/* Card anchors wrap their headings and excerpts. Never underline the card text. */
+a.card, a.card:hover, a.card:focus-visible,
+a.card :is(h3,p,.pill,.meta),
+a.card:hover :is(h3,p,.pill,.meta),
+a.card:focus-visible :is(h3,p,.pill,.meta) {
+  text-decoration: none;
+}
+a.card {
+  display: block;
+  color: inherit;
+  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+}
+a.card:hover, a.card:focus-visible {
+  transform: translateY(-3px);
+  border-color: #c3d7e4;
+  box-shadow: 0 18px 42px rgba(23,54,93,.12);
+}
+/* The animated nav marker grows from the centre and retreats on mouseout. */
+.site-header .nav a {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 0 12px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color .22s ease;
+}
+.site-header .nav a::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 5px;
+  height: 2px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #8bb6a2, #387d75, #d6b15a);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform .28s cubic-bezier(.22,.61,.36,1);
+  pointer-events: none;
+}
+.site-header .nav a:hover, .site-header .nav a:focus-visible {
+  color: #296b61;
+  text-decoration: none;
+}
+.site-header .nav a:hover::after,
+.site-header .nav a:focus-visible::after,
+.site-header .nav a.active::after,
+.site-header .nav a[aria-current="page"]::after {transform: scaleX(1);}
+/* The mobile menu remains easy to tap; avoid intrusive animated bars. */
+@media (max-width: 800px) {
+  .site-header .nav a {padding: 8px 0;min-height:42px;}
+  .site-header .nav a::after {bottom: 5px;}
+}
+@media (prefers-reduced-motion: reduce) {
+  a.card, .site-header .nav a, .site-header .nav a::after {transition: none!important;}
+}
+
+/* v11: Persistent current-page indicator; hover remains full-width animated. */
+.site-header .nav a.active,
+.site-header .nav a[aria-current="page"] {color:#296b61;}
+.site-header .nav a.active::after,
+.site-header .nav a[aria-current="page"]::after {transform:scaleX(.55);}
+.site-header .nav a:hover::after,
+.site-header .nav a:focus-visible::after {transform:scaleX(1);}
+@media (max-width:800px) {
+  .site-header .nav a.active::after,
+  .site-header .nav a[aria-current="page"]::after {
+    left:0;right:auto;width:30px;transform:scaleX(1);transform-origin:left;
+  }
+  .site-header .nav a:hover::after,
+  .site-header .nav a:focus-visible::after {transform:scaleX(1);}
+}
