@@ -129,13 +129,30 @@ function renderComments(items, helpfulCounts={}, articlePost=null){
   const card=(c,isReply=false)=>{
     const n=helpfulCounts[c.id]||0;
     const voted=!!localStorage.getItem('nh-helpful-'+c.id);
-    return `<div class="reader-comment ${isReply?'reader-reply':''}"><span class="comment-avatar" aria-hidden="true">${esc((c.name||'R').trim().slice(0,1).toUpperCase())}</span><div class="comment-content"><div class="comment-byline"><strong>${esc(c.name||'Reader')}</strong>${c.is_author?'<span class="author-badge">Author</span>':''}<time class="meta">${date(c.created_at)}</time></div><p>${esc(c.body)}</p><div class="comment-actions"><button type="button" class="comment-action" data-helpful="${c.id}" ${voted?'disabled':''} aria-label="Mark comment helpful">♡ Helpful${n?' · '+n:''}</button>${!isReply?`<button type="button" class="comment-action" data-reply="${c.id}">↳ Reply</button>`:''}${n?`<span class="helpful-label">${n} ${n===1?'person':'people'} found this helpful</span>`:''}</div>${!isReply?`<div class="reply-container" id="reply-${c.id}"></div>`:''}</div></div>`;
+    return `<div class="reader-comment ${isReply?'reader-reply':''}"><span class="comment-avatar" aria-hidden="true">${esc((c.name||'R').trim().slice(0,1).toUpperCase())}</span><div class="comment-content"><div class="comment-byline"><strong>${esc(c.name||'Reader')}</strong>${c.is_author?'<span class="author-badge">Author</span>':''}<time class="meta">${date(c.created_at)}</time>${c.edited_at?'<span class="mini muted">· Edited</span>':''}</div><p>${esc(c.body)}</p><div class="comment-actions"><button type="button" class="comment-action" data-helpful="${c.id}" ${voted?'disabled':''} aria-label="Mark comment helpful">♡ Helpful${n?' · '+n:''}</button>${!isReply?`<button type="button" class="comment-action" data-reply="${c.id}">↳ Reply</button>`:''}${localStorage.getItem('nh-edit-'+c.id)?`<button type="button" class="comment-action" data-edit-comment="${c.id}">✎ Edit</button>`:''}${n?`<span class="helpful-label">${n} ${n===1?'person':'people'} found this helpful</span>`:''}</div>${!isReply?`<div class="reply-container" id="reply-${c.id}"></div>`:''}<div class="comment-edit-mount" id="edit-${c.id}"></div></div></div>`;
   };
   $('#comments').innerHTML=parents.length?parents.map(c=>{
     const replies=children.get(c.id)||[];
     return `<div class="comment-thread">${card(c)}${replies.length?`<div class="reply-thread">${replies.map(r=>card(r,true)).join('')}</div>`:''}</div>`;
   }).join(''):'<div class="empty-comment">No comments yet. Start the conversation.</div>';
   if(!articlePost)return;
+  $('#comments').querySelectorAll('[data-edit-comment]').forEach(b=>b.onclick=()=>{
+    const c=items.find(x=>String(x.id)===b.dataset.editComment),host=document.getElementById('edit-'+b.dataset.editComment);
+    if(!c||!host)return;
+    if(host.querySelector('form')){host.replaceChildren();return}
+    const f=document.createElement('form');f.className='comment-edit-form';
+    const label=document.createElement('label');label.textContent='Edit your comment';
+    const ta=document.createElement('textarea');ta.className='field';ta.required=true;ta.minLength=3;ta.maxLength=1500;ta.value=c.body;
+    label.appendChild(ta);f.appendChild(label);
+    const save=document.createElement('button');save.type='submit';save.className='btn small';save.textContent='Save edit';f.appendChild(save);
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='btn small ghost';cancel.textContent='Cancel';cancel.onclick=()=>host.replaceChildren();f.appendChild(cancel);
+    const feedback=document.createElement('p');feedback.className='mini';feedback.setAttribute('role','status');f.appendChild(feedback);host.replaceChildren(f);
+    f.onsubmit=async e=>{e.preventDefault();save.disabled=true;
+      const {data,error:err}=await db.rpc('journal_edit_own_comment',{p_comment_id:c.id,p_edit_token:localStorage.getItem('nh-edit-'+c.id),p_new_body:ta.value.trim()});
+      if(err||!data){feedback.textContent=err?.message||'Could not update comment.';save.disabled=false;return}
+      feedback.textContent='Saved. Your edited comment is awaiting review.';await refreshEngagement(articlePost);
+    };
+  });
   $('#comments').querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>{
     const area=document.getElementById('reply-'+b.dataset.reply);
     if(area.querySelector('form')){area.innerHTML='';return}
@@ -146,7 +163,7 @@ function renderComments(items, helpfulCounts={}, articlePost=null){
       e.preventDefault();const form=e.currentTarget,btn=form.querySelector('[type=submit]');btn.disabled=true;
       let visitor=localStorage.getItem('nh-comment-visitor');
       if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
-      const {error:err}=await db.from('comments').insert({post_id:articlePost.id,parent_id:form.dataset.parent,name:form.querySelector('.reply-name').value.trim()||'Reader',body:form.querySelector('.reply-text').value.trim(),visitor_id:visitor});
+      const token=crypto.randomUUID();const {data:commentId,error:err}=await db.rpc('journal_submit_editable_comment',{p_post_id:articlePost.id,p_parent_id:form.dataset.parent,p_name:form.querySelector('.reply-name').value.trim()||'Reader',p_body:form.querySelector('.reply-text').value.trim(),p_visitor_id:visitor,p_edit_token:token});if(!err&&commentId)localStorage.setItem('nh-edit-'+commentId,token);
       if(err){form.querySelector('.reply-status').textContent='Unable to submit reply. Please try again later.';btn.disabled=false}
       else{await refreshEngagement(articlePost);$('#commentstatus').innerHTML=status('Reply received. It will appear when approved if additional review is needed.')}
     };
@@ -164,7 +181,7 @@ async function refreshEngagement(p){
   if(!db)return;
   const [countRes,commentsRes,helpfulRes]=await Promise.all([
     db.rpc('get_like_count',{p_post_id:p.id}),
-    db.from('comments').select('id,parent_id,name,body,created_at,is_author').eq('post_id',p.id).eq('status','approved').order('created_at',{ascending:true}).limit(200),
+    db.from('comments').select('id,parent_id,name,body,created_at,edited_at,is_author').eq('post_id',p.id).eq('status','approved').order('created_at',{ascending:true}).limit(200),
     db.rpc('journal_comment_helpful_counts',{p_post_id:p.id})
   ]);
   $('#likes').textContent=countRes.data??0;
@@ -191,7 +208,7 @@ async function loadEngagement(p){
     let visitor=localStorage.getItem('nh-comment-visitor');
     if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
     const button=$('#commentform button');button.disabled=true;
-    const {error:err}=await db.from('comments').insert({post_id:p.id,name:name||'Reader',body,visitor_id:visitor});
+    const token=crypto.randomUUID();const {data:commentId,error:err}=await db.rpc('journal_submit_editable_comment',{p_post_id:p.id,p_parent_id:null,p_name:name||'Reader',p_body:body,p_visitor_id:visitor,p_edit_token:token});if(!err&&commentId)localStorage.setItem('nh-edit-'+commentId,token);
     if(err){console.warn('Comment submission:',err);$('#commentstatus').innerHTML=error('We could not accept your comment. Please try again later.')}
     else{$('#commentstatus').innerHTML=status('Thanks! Your comment was received. Comments that pass our checks appear automatically; others await review.');$('#commentform').reset();await refreshEngagement(p)}
     button.disabled=false;
@@ -199,23 +216,25 @@ async function loadEngagement(p){
 }
 function contactFormHTML(){
  const cfg=INTEGRATIONS.emailjs;
- if(!cfg.serviceId||!cfg.templateId||!cfg.publicKey||!cfg.recaptchaSiteKey)return '';
+ const emailReady=!!(cfg.serviceId&&cfg.templateId&&cfg.publicKey&&cfg.recaptchaSiteKey);
  return `<section class="contact-form-wrap" aria-labelledby="contact-form-title"><h2 id="contact-form-title">Send us a message</h2><p>Use this form for editorial enquiries or feedback. Do not include passwords or sensitive personal information.</p>
  <form id="contact-form"><div class="contact-fields"><label>Your name<input class="field" name="from_name" maxlength="80" required autocomplete="name"></label><label>Your email<input class="field" type="email" name="reply_to" maxlength="254" required autocomplete="email"></label></div>
  <label>Subject<input class="field" name="subject" maxlength="120" required></label>
  <label>Message<textarea class="field" name="message" minlength="10" maxlength="3000" rows="6" required></textarea></label>
  <label class="visually-hidden" aria-hidden="true">Leave this field blank<input name="website" tabindex="-1" autocomplete="off"></label>
- <div id="contact-captcha" class="g-recaptcha" data-sitekey="${esc(cfg.recaptchaSiteKey)}"></div>
+ ${emailReady?`<div id="contact-captcha" class="g-recaptcha" data-sitekey="${esc(cfg.recaptchaSiteKey)}"></div>`:`<p class="mini muted">Email delivery is being configured. For now, submitting this form opens your email application with the message filled in.</p>`}
  <button class="btn" type="submit">Send message</button><p id="contact-message" role="status" aria-live="polite"></p></form></section>`;
 }
 function wireContactForm(){
  const form=$('#contact-form');if(!form)return;
- if(!window.grecaptcha){
+ const emailReady=!!(INTEGRATIONS.emailjs.serviceId&&INTEGRATIONS.emailjs.templateId&&INTEGRATIONS.emailjs.publicKey&&INTEGRATIONS.emailjs.recaptchaSiteKey);
+ if(emailReady&&!window.grecaptcha){
   const script=document.createElement('script');script.src='https://www.google.com/recaptcha/api.js';script.async=true;script.defer=true;document.head.appendChild(script);
  }
  form.onsubmit=async e=>{
   e.preventDefault();const msg=$('#contact-message'),button=form.querySelector('[type=submit]');
   const data=new FormData(form);if(data.get('website'))return;
+  if(!emailReady){const subject=String(data.get('subject')||'Journal enquiry');const message=`From: ${data.get('from_name')}\nReply to: ${data.get('reply_to')}\n\n${data.get('message')}`;window.location.href=`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;msg.textContent='Your email application should open. Please send the message there to finish contacting us.';return}
   const captcha=window.grecaptcha?.getResponse?.();
   if(!captcha){msg.textContent='Please complete the verification first.';return}
   const last=Number(sessionStorage.getItem('nh-contact-last')||0);
@@ -490,7 +509,7 @@ function commentsAdmin(){
  const filter=state.commentFilter||'all';
  const pending=state.comments.filter(c=>c.status==='pending');
  const visible=state.comments.filter(c=>filter==='all'||c.status===filter);
- $('#adminbody').innerHTML=`<div class="panel"><p class="muted">Flagged comments await your review. Low-risk comments can publish automatically.</p><label class="admin-filter-label" for="comment-status-filter">Show comments <select class="field" id="comment-status-filter"><option value="all" ${filter==='all'?'selected':''}>All comments</option><option value="pending" ${filter==='pending'?'selected':''}>Pending (${pending.length})</option><option value="approved" ${filter==='approved'?'selected':''}>Approved</option><option value="rejected" ${filter==='rejected'?'selected':''}>Rejected</option></select></label>${visible.length?visible.map(c=>`<div class="comment"><strong>${esc(c.name||'Reader')}</strong> <span class="muted">on ${esc(c.posts?.title||'Article')} · ${esc(c.status)}</span><p>${esc(c.body)}</p><div class="actions">${c.status!=='approved'?`<button class="btn small" data-status="approved" data-id="${c.id}">Approve</button>`:''}${c.status==='approved'&&!c.parent_id?`<button class="btn small ghost" data-admin-reply="${c.id}">Reply as author</button>`:''}${c.status!=='rejected'?`<button class="btn small ghost" data-status="rejected" data-id="${c.id}">Reject</button>`:''}<button class="btn small danger" data-status="delete" data-id="${c.id}">Delete</button></div></div>`).join(''):'<p>No comments match this filter.</p>'}</div>`;
+ $('#adminbody').innerHTML=`<div class="panel"><p class="muted">Flagged comments await your review. Low-risk comments can publish automatically.</p><label class="admin-filter-label" for="comment-status-filter">Show comments <select class="field" id="comment-status-filter"><option value="all" ${filter==='all'?'selected':''}>All comments</option><option value="pending" ${filter==='pending'?'selected':''}>Pending (${pending.length})</option><option value="approved" ${filter==='approved'?'selected':''}>Approved</option><option value="rejected" ${filter==='rejected'?'selected':''}>Rejected</option></select></label>${visible.length?visible.map(c=>`<div class="comment"><strong>${esc(c.name||'Reader')}</strong> <span class="muted">on ${esc(c.posts?.title||'Article')} · ${esc(c.status)}</span><p>${esc(c.body)}</p><div class="actions">${c.status!=='approved'?`<button class="btn small" data-status="approved" data-id="${c.id}">Approve</button>`:''}${c.status==='approved'&&!c.parent_id?`<button class="btn small ghost" data-admin-reply="${c.id}">Reply as author</button>`:''}${c.status!=='rejected'?`<button class="btn small ghost" data-status="rejected" data-id="${c.id}">Reject</button>`:''}<button class="btn small ghost" data-admin-edit="${c.id}">Edit</button><button class="btn small danger" data-status="delete" data-id="${c.id}">Delete</button></div></div>`).join(''):'<p>No comments match this filter.</p>'}</div>`;
  $('#comment-status-filter').onchange=e=>{state.commentFilter=e.target.value;commentsAdmin()};
   document.querySelectorAll('[data-admin-reply]').forEach(button=>button.onclick=()=>{
     const c=state.comments.find(x=>String(x.id)===button.dataset.adminReply);
@@ -507,6 +526,17 @@ function commentsAdmin(){
       else{await loadAdmin();drawAdmin()}
     };
   });
+ document.querySelectorAll('[data-admin-edit]').forEach(b=>b.onclick=()=>{
+   const c=state.comments.find(x=>String(x.id)===b.dataset.adminEdit);if(!c)return;
+   const host=b.closest('.comment');if(host.querySelector('.admin-edit-form')){host.querySelector('.admin-edit-form').remove();return}
+   const f=document.createElement('form');f.className='admin-edit-form';
+   const ta=document.createElement('textarea');ta.className='field';ta.required=true;ta.minLength=3;ta.maxLength=1500;ta.value=c.body;ta.setAttribute('aria-label','Edit comment');f.appendChild(ta);
+   const save=document.createElement('button');save.className='btn small';save.type='submit';save.textContent='Save edited comment';f.appendChild(save);
+   const cancel=document.createElement('button');cancel.className='btn small ghost';cancel.type='button';cancel.textContent='Cancel';cancel.onclick=()=>f.remove();f.appendChild(cancel);
+   const msg=document.createElement('p');msg.className='mini';f.appendChild(msg);host.appendChild(f);
+   f.onsubmit=async e=>{e.preventDefault();save.disabled=true;const {error:err}=await db.from('comments').update({body:ta.value.trim(),edited_at:new Date().toISOString()}).eq('id',c.id);
+     if(err){msg.textContent=err.message;save.disabled=false;return}await loadAdmin();drawAdmin();};
+ });
  document.querySelectorAll('[data-status]').forEach(b=>b.onclick=async()=>{const res=b.dataset.status==='delete'?await db.from('comments').delete().eq('id',b.dataset.id):await db.from('comments').update({status:b.dataset.status}).eq('id',b.dataset.id);if(res.error)alert(res.error.message);else{await loadAdmin();drawAdmin()}})
 }
 function likesAdmin(){
