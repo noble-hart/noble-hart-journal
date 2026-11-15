@@ -44,7 +44,26 @@ function articleSchema(p){
  script.textContent=JSON.stringify(data).replace(/</g,'\\u003c');document.head.appendChild(script);
 }
 
-const header=()=>`<a class="skip" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner"><a class="brand" href="/" aria-label="Noble Hart Journal home"><img class="brand-emblem" src="/noble-hart-logo.png" alt="" width="46" height="46"><span class="brand-wordmark">NOBLE HART<small>THE JOURNAL</small></span></a><button class="menu" id="menu" aria-label="Toggle navigation">☰</button><nav class="nav ${state.menu?'open':''}" id="nav"><a href="/">Home</a><a href="/articles">Articles</a><a href="/gift-guides">Gift Guides</a><a href="/about">About</a><a href="/contact">Contact</a></nav></div></header>`;
+// Keep the current section visibly marked even after the pointer leaves its link.
+// Article detail pages belong to the Articles section; their parent link receives
+// the visual marker without incorrectly claiming to be the current page.
+const navLinks = [
+  ['/', 'Home'],
+  ['/articles', 'Articles'],
+  ['/gift-guides', 'Gift Guides'],
+  ['/about', 'About'],
+  ['/contact', 'Contact']
+];
+const header=()=>{
+ const path=route();
+ const activePath=path.startsWith('/post/')?'/articles':path;
+ const links=navLinks.map(([href,label])=>{
+  const selected=activePath===href;
+  const current=path===href;
+  return `<a href="${href}"${selected?' class="active"':''}${current?' aria-current="page"':''}>${label}</a>`;
+ }).join('');
+ return `<a class="skip" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner"><a class="brand" href="/" aria-label="Noble Hart Journal home"><img class="brand-emblem" src="/noble-hart-logo.png" alt="" width="46" height="46"><span class="brand-wordmark">NOBLE HART<small>THE JOURNAL</small></span></a><button class="menu" id="menu" aria-label="Toggle navigation">☰</button><nav class="nav ${state.menu?'open':''}" id="nav" aria-label="Main navigation">${links}</nav></div></header>`;
+};
 const footer=()=>`<footer class="footer"><div class="wrap"><div class="footer-grid"><div class="footer-intro"><div class="footer-brand"><img src="/noble-hart-logo.png" alt="Noble Hart quill and leaf emblem" width="80" height="80" loading="lazy" decoding="async"><h2>The Noble Hart Journal</h2></div><p>Ideas worth sharing. Stories worth reading.</p><p class="mini">Thoughtful stories, practical ideas, and considered recommendations.</p></div><div class="footer-subscribe"><h2>Notes from the Journal</h2><p>Get occasional new articles and thoughtful recommendations. No spam.</p>${INTEGRATIONS.brevoSignupUrl?`<a class="btn light" href="${esc(INTEGRATIONS.brevoSignupUrl)}" target="_blank" rel="noopener noreferrer">Join the newsletter →</a>`:`<form id="newsletter-form" class="newsletter-form"><label class="visually-hidden" for="newsletter-email">Email address</label><input class="field" id="newsletter-email" type="email" autocomplete="email" maxlength="254" required placeholder="Your email address"><button type="submit" class="btn light">Join the waitlist</button></form>`}<p id="newsletter-message" class="newsletter-message" role="status" aria-live="polite"></p><p class="newsletter-consent">Join voluntarily; you can unsubscribe from future newsletters. See our <a href="/privacy">Privacy Policy</a>.</p></div></div><div class="footer-bottom"><div class="footer-links"><a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy</a><a href="/disclosure">Disclosure</a></div><small>© ${new Date().getFullYear()} Noble Hart. All rights reserved.</small></div></div></footer>`;
 function wireNewsletter(){
  const form=$('#newsletter-form');if(!form)return;
@@ -217,36 +236,67 @@ async function loadEngagement(p){
 function contactFormHTML(){
  const cfg=INTEGRATIONS.emailjs;
  const emailReady=!!(cfg.serviceId&&cfg.templateId&&cfg.publicKey&&cfg.recaptchaSiteKey);
- return `<section class="contact-form-wrap" aria-labelledby="contact-form-title"><h2 id="contact-form-title">Send us a message</h2><p>Use this form for editorial enquiries or feedback. Do not include passwords or sensitive personal information.</p>
+ return `<section class="contact-form-wrap" aria-labelledby="contact-form-title"><div class="eyebrow">Write to the Journal</div><h2 id="contact-form-title">Send us a message</h2><p>Have a story idea, question, correction or collaboration enquiry? We're glad to hear from you.</p>
  <form id="contact-form"><div class="contact-fields"><label>Your name<input class="field" name="from_name" maxlength="80" required autocomplete="name"></label><label>Your email<input class="field" type="email" name="reply_to" maxlength="254" required autocomplete="email"></label></div>
  <label>Subject<input class="field" name="subject" maxlength="120" required></label>
  <label>Message<textarea class="field" name="message" minlength="10" maxlength="3000" rows="6" required></textarea></label>
  <label class="visually-hidden" aria-hidden="true">Leave this field blank<input name="website" tabindex="-1" autocomplete="off"></label>
- ${emailReady?`<div id="contact-captcha" class="g-recaptcha" data-sitekey="${esc(cfg.recaptchaSiteKey)}"></div>`:`<p class="mini muted">Email delivery is being configured. For now, submitting this form opens your email application with the message filled in.</p>`}
- <button class="btn" type="submit">Send message</button><p id="contact-message" role="status" aria-live="polite"></p></form></section>`;
+ ${emailReady?`<div class="contact-captcha-region"><div id="contact-captcha" aria-label="Spam protection"></div></div>`:`<p class="mini muted">Email delivery is being configured. For now, submitting this form opens your email application with the message filled in.</p>`}
+ <button class="btn contact-send-button" type="submit">Send message</button><p id="contact-message" role="status" aria-live="polite"></p><p class="mini muted contact-privacy-note">Please don't include passwords, financial information or other sensitive personal details. See our <a href="/privacy">Privacy Policy</a>.</p></form></section>`;
 }
 function wireContactForm(){
  const form=$('#contact-form');if(!form)return;
- const emailReady=!!(INTEGRATIONS.emailjs.serviceId&&INTEGRATIONS.emailjs.templateId&&INTEGRATIONS.emailjs.publicKey&&INTEGRATIONS.emailjs.recaptchaSiteKey);
- if(emailReady&&!window.grecaptcha){
-  const script=document.createElement('script');script.src='https://www.google.com/recaptcha/api.js';script.async=true;script.defer=true;document.head.appendChild(script);
+ const cfg=INTEGRATIONS.emailjs;
+ const emailReady=!!(cfg.serviceId&&cfg.templateId&&cfg.publicKey&&cfg.recaptchaSiteKey);
+ let captchaWidgetId=null;
+ if(emailReady){
+  const renderCaptcha=()=>{
+   const target=form.querySelector('#contact-captcha');
+   if(!target||!form.isConnected||captchaWidgetId!==null||!window.grecaptcha?.render)return;
+   try{captchaWidgetId=window.grecaptcha.render(target,{sitekey:cfg.recaptchaSiteKey});}
+   catch(err){console.warn('Could not render contact verification:',err);const message=form.querySelector('#contact-message');if(message)message.textContent='Verification could not load. Please refresh this page.'}
+  };
+  if(window.grecaptcha?.render){renderCaptcha()}
+  else{
+   let script=document.getElementById('nh-contact-recaptcha-script');
+   if(!script){
+    script=document.createElement('script');script.id='nh-contact-recaptcha-script';script.src='https://www.google.com/recaptcha/api.js?render=explicit';script.async=true;script.defer=true;document.head.appendChild(script);
+   }
+   script.addEventListener('load',renderCaptcha,{once:true});
+  }
  }
  form.onsubmit=async e=>{
-  e.preventDefault();const msg=$('#contact-message'),button=form.querySelector('[type=submit]');
+  e.preventDefault();const msg=form.querySelector('#contact-message'),button=form.querySelector('[type=submit]');
   const data=new FormData(form);if(data.get('website'))return;
   if(!emailReady){const subject=String(data.get('subject')||'Journal enquiry');const message=`From: ${data.get('from_name')}\nReply to: ${data.get('reply_to')}\n\n${data.get('message')}`;window.location.href=`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;msg.textContent='Your email application should open. Please send the message there to finish contacting us.';return}
-  const captcha=window.grecaptcha?.getResponse?.();
+  if(captchaWidgetId===null){msg.textContent='Verification is still loading. Please try again shortly.';return}
+  const captcha=window.grecaptcha?.getResponse?.(captchaWidgetId);
   if(!captcha){msg.textContent='Please complete the verification first.';return}
   const last=Number(sessionStorage.getItem('nh-contact-last')||0);
   if(Date.now()-last<60000){msg.textContent='Please allow a minute between messages.';return}
   button.disabled=true;msg.textContent='Sending…';
   try{
-   const r=await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:INTEGRATIONS.emailjs.serviceId,template_id:INTEGRATIONS.emailjs.templateId,user_id:INTEGRATIONS.emailjs.publicKey,template_params:{from_name:String(data.get('from_name')),reply_to:String(data.get('reply_to')),subject:String(data.get('subject')),message:String(data.get('message')),'g-recaptcha-response':captcha}})});
+   const r=await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:cfg.serviceId,template_id:cfg.templateId,user_id:cfg.publicKey,template_params:{
+    name:String(data.get('from_name')||''),
+    email:String(data.get('reply_to')||''),
+    title:String(data.get('subject')||''),
+    message:String(data.get('message')||''),
+    time:new Date().toLocaleString('en-NG',{dateStyle:'medium',timeStyle:'short',timeZone:'Africa/Lagos'}),
+    'g-recaptcha-response':captcha
+   }})});
    if(!r.ok)throw new Error('Delivery unavailable');
    sessionStorage.setItem('nh-contact-last',String(Date.now()));form.reset();msg.textContent='Thank you. Your message has been sent.';
   }catch(err){console.warn('Contact email failed',err);msg.textContent='We could not send your message. Please email noblehart01@gmail.com directly.'}
-  finally{window.grecaptcha?.reset?.();button.disabled=false}
+  finally{if(captchaWidgetId!==null)window.grecaptcha?.reset?.(captchaWidgetId);button.disabled=false}
  };
+}
+function contactIntroHTML(){
+ return `<aside class="contact-intro" aria-label="Contact information"><div class="eyebrow">We're listening</div><h2>Let's connect.</h2><p class="contact-lead">The best conversations begin with a thoughtful message. We'd love to hear your feedback, ideas and questions.</p>
+ <div class="contact-email-card"><span class="contact-info-label">Email us directly</span><a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a></div>
+ <div class="contact-info-section"><h3>Editorial enquiries</h3><p>Have a topic suggestion or spotted something that needs correcting? Include the article title or link and a little context.</p></div>
+ <div class="contact-info-section"><h3>Collaborations</h3><p>We're open to relevant professional enquiries. Please describe your proposal and any commercial relationship. Coverage and positive reviews are never guaranteed.</p></div>
+ <div class="contact-info-section"><h3>Privacy requests</h3><p>For data-related questions, email us with <strong>Privacy Request</strong> in the subject line. Please share only what's needed to identify your request.</p></div>
+ <p class="contact-small-note">For orders, shipping, returns or product warranties from third-party retailers in our gift guides, please contact the retailer directly.</p></aside>`;
 }
 
 function simple(which){
@@ -378,7 +428,7 @@ If you believe something is inaccurate, out of date or inadequately disclosed, e
 
 Thank you for supporting The Noble Hart Journal.`]
  };
- const [title,body]=pages[which];meta(title);frame(`<div class="pagehead"><div class="wrap"><div class="eyebrow">Noble Hart / The Journal</div><h1>${esc(title)}</h1><p>${which==='about'?'Discover the ideas and values behind our publication.':which==='contact'?'Questions, ideas and thoughtful conversations are always welcome.':which==='privacy'?'How we handle reader information.':'How we approach recommendations, links and commercial relationships.'}</p></div></div><section class="section"><div class="wrap prose article-body legal-page">${paragraphs(body)}${which==='contact'?contactFormHTML():''}</div></section>`);if(which==='contact')wireContactForm();
+ const [title,body]=pages[which];meta(title);frame(`<div class="pagehead"><div class="wrap"><div class="eyebrow">Noble Hart / The Journal</div><h1>${esc(title)}</h1><p>${which==='about'?'Discover the ideas and values behind our publication.':which==='contact'?'Questions, ideas and thoughtful conversations are always welcome.':which==='privacy'?'How we handle reader information.':'How we approach recommendations, links and commercial relationships.'}</p></div></div><section class="section"><div class="wrap ${which==='contact'?'contact-layout':'prose article-body legal-page'}">${which==='contact'?`${contactIntroHTML()}${contactFormHTML()}`:paragraphs(body)}</div></section>`);if(which==='contact')wireContactForm();
 }
 
 async function initialize(){
