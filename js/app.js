@@ -1,3 +1,4 @@
+import {INTEGRATIONS} from './integrations-config.js';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 // Supabase is loaded after the page renders, so a CDN/network failure cannot blank the blog.
 const configured = typeof SUPABASE_URL === 'string' && /^https:\/\/[^/]+\.supabase\.co\/?$/.test(SUPABASE_URL) && typeof SUPABASE_ANON_KEY === 'string' && SUPABASE_ANON_KEY.length > 20 && !SUPABASE_ANON_KEY.startsWith('PASTE_');
@@ -11,21 +12,84 @@ const route=()=>decodeURIComponent(location.pathname.replace(/\/+$/,'')||'/');
 const state={posts:[],cats:[],session:null,admin:false,view:'overview',editing:null,comments:[],likes:[],query:'',category:'All',menu:false,postFilter:'all',commentFilter:'all'};
 const status=t=>`<div class="message">${esc(t)}</div>`;
 const error=t=>`<div class="message error">${esc(t)}</div>`;
-const meta=(title,desc)=>{document.title=title+' | The Noble Hart Journal';(document.querySelector('meta[name="description"]')||document.head.appendChild(Object.assign(document.createElement('meta'),{name:'description'}))).content=desc||'Ideas worth sharing. Stories worth reading.'};
-const header=()=>`<a class="skip" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner"><a class="brand" href="/">NOBLE HART<small>THE JOURNAL</small></a><button class="menu" id="menu" aria-label="Toggle navigation">☰</button><nav class="nav ${state.menu?'open':''}" id="nav"><a href="/">Home</a><a href="/articles">Articles</a><a href="/gift-guides">Gift Guides</a><a href="/about">About</a><a href="/contact">Contact</a></nav></div></header>`;
-const footer=()=>`<footer class="footer"><div class="wrap"><div class="footer-grid"><div><h2>The Noble Hart Journal</h2><p>Ideas worth sharing. Stories worth reading.</p></div><div class="footer-links"><a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy</a><a href="/disclosure">Disclosure</a><a href="/admin">Admin</a></div></div><hr style="border:0;border-top:1px solid #42617c;margin:28px 0"><small>© ${new Date().getFullYear()} Noble Hart. All rights reserved.</small></div></footer>`;
-const frame=(html)=>{app.innerHTML=header()+`<main id="main">${html}</main>`+footer();$('#menu')?.addEventListener('click',()=>{$('#nav').classList.toggle('open')})};
+const SITE_URL='https://noble-hart-journal.noblehart01.workers.dev';
+const CONTACT_EMAIL='noblehart01@gmail.com';
+const absoluteCover = value => {
+ const raw=String(value||'').trim();
+ if(!raw)return '';
+ if(/^https:\/\//i.test(raw))return raw;
+ if(/^http:\/\//i.test(raw))return ''; // Do not embed insecure images
+ if(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*\.(?:png|jpe?g|webp|gif|avif)$/i.test(raw)&&db){return db.storage.from('journal-images').getPublicUrl(raw).data.publicUrl}
+ return raw.startsWith('/') ? location.origin+raw : '';
+};
+function putMeta(attr,key,value){let el=document.head.querySelector(`meta[${attr}="${key}"]`);if(!el){el=document.createElement('meta');el.setAttribute(attr,key);document.head.appendChild(el)}el.content=value}
+function meta(title,desc,cover='',type='website'){
+ const t=title==='Home'?'The Noble Hart Journal':`${title} | The Noble Hart Journal`;
+ const summary=String(desc||'Ideas worth sharing. Stories worth reading.').slice(0,220);
+ document.title=t;putMeta('name','description',summary);
+ const canonical=location.origin+(location.pathname.replace(/\/+$/,'')||'/');
+ let link=document.head.querySelector('link[rel="canonical"]');if(!link){link=document.createElement('link');link.rel='canonical';document.head.appendChild(link)}link.href=canonical;
+ putMeta('property','og:site_name','The Noble Hart Journal');putMeta('property','og:type',type);
+ putMeta('property','og:title',t);putMeta('property','og:description',summary);putMeta('property','og:url',canonical);
+ putMeta('name','twitter:card',cover?'summary_large_image':'summary');putMeta('name','twitter:title',t);putMeta('name','twitter:description',summary);
+ document.head.querySelectorAll('meta[property="og:image"],meta[name="twitter:image"]').forEach(el=>el.remove());
+ if(cover){putMeta('property','og:image',cover);putMeta('name','twitter:image',cover)}
+ putMeta('name','robots',location.pathname==='/admin'?'noindex, nofollow':'index, follow');
+ document.querySelector('#nh-jsonld')?.remove();
+}
+function articleSchema(p){
+ const script=document.createElement('script');script.id='nh-jsonld';script.type='application/ld+json';
+ const data={'@context':'https://schema.org','@type':'BlogPosting',headline:p.title,description:p.excerpt||'',url:location.href,author:{'@type':'Organization',name:'Noble Hart'},publisher:{'@type':'Organization',name:'The Noble Hart Journal'},datePublished:p.published_at||p.created_at,dateModified:p.updated_at||p.published_at||p.created_at};
+ const image=absoluteCover(p.cover_url);if(image)data.image=image;
+ script.textContent=JSON.stringify(data).replace(/</g,'\\u003c');document.head.appendChild(script);
+}
+
+const header=()=>`<a class="skip" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner"><a class="brand" href="/" aria-label="Noble Hart Journal home"><img class="brand-emblem" src="/noble-hart-logo.png" alt="" width="46" height="46"><span class="brand-wordmark">NOBLE HART<small>THE JOURNAL</small></span></a><button class="menu" id="menu" aria-label="Toggle navigation">☰</button><nav class="nav ${state.menu?'open':''}" id="nav"><a href="/">Home</a><a href="/articles">Articles</a><a href="/gift-guides">Gift Guides</a><a href="/about">About</a><a href="/contact">Contact</a></nav></div></header>`;
+const footer=()=>`<footer class="footer"><div class="wrap"><div class="footer-grid"><div class="footer-intro"><div class="footer-brand"><img src="/noble-hart-logo.png" alt="Noble Hart quill and leaf emblem" width="80" height="80" loading="lazy" decoding="async"><h2>The Noble Hart Journal</h2></div><p>Ideas worth sharing. Stories worth reading.</p><p class="mini">Thoughtful stories, practical ideas, and considered recommendations.</p></div><div class="footer-subscribe"><h2>Notes from the Journal</h2><p>Get occasional new articles and thoughtful recommendations. No spam.</p>${INTEGRATIONS.brevoSignupUrl?`<a class="btn light" href="${esc(INTEGRATIONS.brevoSignupUrl)}" target="_blank" rel="noopener noreferrer">Join the newsletter →</a>`:`<form id="newsletter-form" class="newsletter-form"><label class="visually-hidden" for="newsletter-email">Email address</label><input class="field" id="newsletter-email" type="email" autocomplete="email" maxlength="254" required placeholder="Your email address"><button type="submit" class="btn light">Join the waitlist</button></form>`}<p id="newsletter-message" class="newsletter-message" role="status" aria-live="polite"></p><p class="newsletter-consent">Join voluntarily; you can unsubscribe from future newsletters. See our <a href="/privacy">Privacy Policy</a>.</p></div></div><div class="footer-bottom"><div class="footer-links"><a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy</a><a href="/disclosure">Disclosure</a></div><small>© ${new Date().getFullYear()} Noble Hart. All rights reserved.</small></div></div></footer>`;
+function wireNewsletter(){
+ const form=$('#newsletter-form');if(!form)return;
+ form.onsubmit=async e=>{e.preventDefault();const input=$('#newsletter-email'),msg=$('#newsletter-message');const email=input.value.trim().toLowerCase();const btn=form.querySelector('button');if(!email)return;
+  if(!db){msg.textContent='Newsletter signup is unavailable at the moment.';return}
+  btn.disabled=true;const {error:err}=await db.rpc('journal_request_newsletter',{p_email:email});btn.disabled=false;
+  if(err){console.warn('Newsletter signup failed:',err);msg.textContent='We could not record your request right now. Please try again later.';return}
+  msg.textContent='Thanks! Your request has been recorded. Email updates will begin once our newsletter launches.';form.reset();localStorage.setItem('nh-newsletter-prompt-v5','done');$('#newsletter-dialog')?.close();
+ };
+}
+function wireNewsletterPopup(){
+ if(!db||localStorage.getItem('nh-newsletter-prompt-v5'))return;
+ if(route()==='/admin')return;
+ setTimeout(()=>{
+  if(!db||localStorage.getItem('nh-newsletter-prompt-v5')||document.querySelector('#newsletter-dialog')||route()==='/admin')return;
+  const dialog=document.createElement('dialog');dialog.id='newsletter-dialog';dialog.className='journal-modal newsletter-modal';dialog.innerHTML=`<div class="newsletter-dialog-body"><button type="button" class="newsletter-close" aria-label="Close newsletter invitation">×</button><div class="eyebrow">From The Noble Hart Journal</div><h2>Thoughtful ideas, straight to your inbox.</h2><p>Join the list for occasional new stories, gift inspiration, and practical guides.</p>${INTEGRATIONS.brevoSignupUrl?`<p><a class="btn" href="${esc(INTEGRATIONS.brevoSignupUrl)}" target="_blank" rel="noopener noreferrer" id="brevo-pop-link">Subscribe securely →</a></p>`:`<form id="newsletter-pop-form"><label for="newsletter-pop-email">Email address</label><input class="field" id="newsletter-pop-email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required><button class="btn" type="submit">Join the waitlist</button><p id="newsletter-pop-status" role="status" aria-live="polite"></p></form>`}<p class="mini muted">No spam. Email updates will begin after the newsletter launches. <a href="/privacy">Privacy Policy</a>.</p></div>`;
+  document.body.appendChild(dialog);
+  const dismiss=()=>{localStorage.setItem('nh-newsletter-prompt-v5','done');dialog.close();dialog.remove()};
+  dialog.querySelector('.newsletter-close').onclick=dismiss;
+  dialog.addEventListener('cancel',e=>{e.preventDefault();dismiss()});
+  dialog.addEventListener('click',e=>{if(e.target===dialog)dismiss()});
+  if (INTEGRATIONS.brevoSignupUrl) dialog.querySelector('#brevo-pop-link').addEventListener('click',()=>localStorage.setItem('nh-newsletter-prompt-v5','done'));
+  else dialog.querySelector('#newsletter-pop-form').onsubmit=async e=>{e.preventDefault();const email=dialog.querySelector('#newsletter-pop-email').value.trim().toLowerCase();const message=dialog.querySelector('#newsletter-pop-status');const btn=e.currentTarget.querySelector('button');if(!db){message.textContent='Signup is temporarily unavailable.';return}btn.disabled=true;const {error:err}=await db.rpc('journal_request_newsletter',{p_email:email});btn.disabled=false;if(err){message.textContent='We could not record your request. Please try later.';return}dismiss();const footerMsg=$('#newsletter-message');if(footerMsg)footerMsg.textContent='Thanks! Your newsletter request was recorded.'};
+  dialog.showModal();
+ },9000);
+}
+
+const frame=(html)=>{app.innerHTML=header()+`<main id="main">${html}</main>`+footer();$('#menu')?.addEventListener('click',()=>{$('#nav').classList.toggle('open')});wireNewsletter()};
 const live=()=>connectionIssue?`<div class="notice">${esc(connectionIssue)}</div>`:configured?'':`<div class="notice">Preview mode: connect Supabase in <code>js/config.js</code> and run <code>supabase/schema.sql</code> to activate publishing, comments and likes.</div>`;
-const img=p=>p.cover_url?`<img src="${esc(p.cover_url)}" alt="${esc(p.cover_alt||p.title)}" loading="lazy">`:`<span class="placeholder">NH</span>`;
+const img=p=>p.cover_url?`<img src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}" loading="lazy">`:`<span class="placeholder">NH</span>`;
 const card=p=>`<a class="card" href="/post/${encodeURIComponent(p.slug)}"><div class="cover">${img(p)}</div><div class="card-body"><span class="pill">${esc(p.category||'Journal')}</span><h3>${esc(p.title)}</h3><p>${esc(p.excerpt||'')}</p><div class="meta" style="margin-top:16px">${date(p.published_at||p.created_at)} · Read article →</div></div></a>`;
 const published=()=>state.posts.filter(p=>p.status==='published');
 const cards=ps=>ps.length?`<div class="grid">${ps.map(card).join('')}</div>`:'<div class="empty">New stories are coming soon. Check back shortly.</div>';
-function home(){meta('Home','Thoughtful stories, ideas, inspiration and practical guides from The Noble Hart Journal');const ps=published();frame(`<section class="hero"><div class="wrap hero-grid"><div><div class="eyebrow">Welcome to the Journal</div><h1>Ideas worth sharing.<br>Stories worth reading.</h1><p>A thoughtful space for fresh perspectives, practical guides, family moments and everyday inspiration. Discover something worth taking with you.</p><a class="btn" href="/articles">Explore the Journal →</a></div><div class="hero-art" aria-hidden="true"><span>NH.</span></div></div></section><section class="section"><div class="wrap">${live()}<div class="section-head"><div><div class="eyebrow">From the Journal</div><h2>Latest stories</h2></div><a href="/articles">View all articles →</a></div>${cards(ps.slice(0,6))}</div></section><section class="section" style="background:var(--cream)"><div class="wrap"><div class="section-head"><div><div class="eyebrow">Thoughtful recommendations</div><h2>Guides & good ideas</h2></div><a href="/gift-guides">Explore gift guides →</a></div>${cards(ps.filter(p=>p.kind==='guide').slice(0,3))}</div></section>`)}
-function listing(guide=false){meta(guide?'Gift Guides':'Articles');let ps=published().filter(p=>!guide||p.kind==='guide');let cats=['All',...new Set(ps.map(p=>p.category).filter(Boolean))];if(state.category!=='All')ps=ps.filter(p=>p.category===state.category);if(state.query)ps=ps.filter(p=>(p.title+' '+p.excerpt+' '+p.category).toLowerCase().includes(state.query.toLowerCase()));frame(`<div class="pagehead"><div class="wrap"><div class="eyebrow">The Noble Hart Journal</div><h1>${guide?'Gift Guides':'Explore the Journal'}</h1><p>${guide?'Useful ideas, thoughtful picks and practical recommendations.':'Stories, perspectives and practical ideas to return to.'}</p></div></div><section class="section"><div class="wrap"><div class="searchrow"><input class="field" id="search" type="search" placeholder="Search stories…" value="${esc(state.query)}" aria-label="Search articles"><button class="btn" id="searchbtn">Search</button></div><div class="taglist" style="margin-bottom:26px">${cats.map(c=>`<button class="tag ${state.category===c?'on':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div><div id="results">${cards(ps)}</div></div></section>`);$('#searchbtn').onclick=()=>{state.query=$('#search').value;listing(guide)};$('#search').onkeydown=e=>{if(e.key==='Enter'){$('#searchbtn').click()}};document.querySelectorAll('[data-cat]').forEach(el=>el.onclick=()=>{state.category=el.dataset.cat;listing(guide)})}
+function giftTopics(){return `<div class="gift-topic-grid" aria-label="Explore gift guides by theme">
+<a class="gift-topic" href="#guides"><span aria-hidden="true">🎁</span><h2>By Recipient</h2><p>Thoughtful ideas for teens, parents, couples, friends and families.</p></a>
+<a class="gift-topic" href="#guides"><span aria-hidden="true">🎉</span><h2>By Occasion</h2><p>Birthdays, celebrations, anniversaries and important milestones.</p></a>
+<a class="gift-topic" href="#guides"><span aria-hidden="true">✨</span><h2>By Interest</h2><p>Books, creativity, games, technology and everyday hobbies.</p></a>
+<a class="gift-topic" href="#guides"><span aria-hidden="true">❄️</span><h2>Seasonal Picks</h2><p>Christmas, festive moments and other seasonal celebrations.</p></a>
+</div>`}
+function home(){meta('Home','Thoughtful stories, family inspiration, useful guides and meaningful gift ideas from The Noble Hart Journal');const ps=published();const articles=ps.filter(p=>p.kind!=='guide');const guides=ps.filter(p=>p.kind==='guide');frame(`<section class="hero"><div class="wrap hero-grid"><div><div class="eyebrow">Welcome to the Journal</div><h1>Ideas worth sharing.<br>Stories worth reading.</h1><p>A thoughtful space for fresh perspectives, practical guides, family moments and everyday inspiration. Discover something worth taking with you.</p><a class="btn" href="/articles">Explore the Journal →</a></div><div class="hero-art" aria-hidden="true"><span>NH.</span></div></div></section><section class="section"><div class="wrap">${live()}<div class="section-head"><div><div class="eyebrow">From the Journal</div><h2>Latest stories</h2></div><a href="/articles">View all articles →</a></div>${cards(articles.slice(0,6))}</div></section><section class="section" style="background:var(--cream)"><div class="wrap"><div class="section-head"><div><div class="eyebrow">Thoughtful recommendations</div><h2>Gift guides and good ideas</h2></div><a href="/gift-guides">Explore gift guides →</a></div>${guides.length?cards(guides.slice(0,3)):'<p class="empty">Our gift guides are being prepared. Meanwhile, explore our thoughtful stories and family ideas.</p>'}</div></section>`)}
+function listing(guide=false){meta(guide?'Gift Guides':'Articles',guide?'Browse thoughtful gift guides by recipient, occasion, interest and season.':'Read thoughtful stories, perspectives and practical ideas from The Noble Hart Journal.');let ps=published().filter(p=>guide?p.kind==='guide':p.kind!=='guide');let cats=['All',...new Set(ps.map(p=>p.category).filter(Boolean))];if(state.category!=='All')ps=ps.filter(p=>p.category===state.category);if(state.query)ps=ps.filter(p=>(p.title+' '+p.excerpt+' '+p.category).toLowerCase().includes(state.query.toLowerCase()));const intro=guide?giftTopics():'';frame(`<div class="pagehead"><div class="wrap"><div class="eyebrow">The Noble Hart Journal</div><h1>${guide?'Thoughtful Gift Guides':'Explore the Journal'}</h1><p>${guide?'Find inspired gifts and considered recommendations for the people, moments and interests that matter.':'Stories, perspectives and practical ideas to return to.'}</p></div></div><section class="section"><div class="wrap">${intro}<div id="guides"><div class="section-head"><div><div class="eyebrow">${guide?'Published guides':'Our articles'}</div><h2>${guide?'Discover gift ideas':'Find your next read'}</h2></div></div><div class="searchrow"><input class="field" id="search" type="search" placeholder="Search ${guide?'gift guides':'stories'}…" value="${esc(state.query)}" aria-label="Search ${guide?'gift guides':'articles'}"><button class="btn" id="searchbtn">Search</button></div><div class="taglist" style="margin-bottom:26px">${cats.map(c=>`<button class="tag ${state.category===c?'on':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div><div id="results">${ps.length?cards(ps):`<div class="empty">${guide?'Our first gift guides are in preparation. Check back for thoughtfully researched recommendations.':'No stories match your search yet.'}</div>`}</div></div></div></section>`);$('#searchbtn').onclick=()=>{state.query=$('#search').value;listing(guide)};$('#search').onkeydown=e=>{if(e.key==='Enter'){$('#searchbtn').click()}};document.querySelectorAll('[data-cat]').forEach(el=>el.onclick=()=>{state.category=el.dataset.cat;listing(guide)})}
 // Minimal Markdown formatting. Escape source HTML before adding supported markup.
 const inlineMarkdown = value => {
   let t=esc(value);
-  t=t.replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)"'<>]+)\)/g,(_,label,url)=>`<a href="${url.replace(/&amp;/g,'&')}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+  t=t.replace(/\[([^\]\n]{1,120})\]\(((?:https?:\/\/|mailto:)[^\s)"'<>]+)\)/g,(_,label,url)=>`<a href="${url.replace(/&amp;/g,'&')}"${url.startsWith('mailto:')?'':' target="_blank" rel="noopener noreferrer"'}>${label}</a>`);
   t=t.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
   t=t.replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
   t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
@@ -48,20 +112,66 @@ const paragraphs = body => {
   }
   flushPara();flushList();return out.join('\n');
 };
-async function article(sl){const p=published().find(p=>p.slug===sl);if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(p.cover_url)}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${paragraphs(p.body)}</div><div class="engage"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Submit comment for review</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div></article>`);await loadEngagement(p)}
-function renderComments(items){
-  $('#commentcount').textContent=`${items.length} ${items.length===1?'comment':'comments'}`;
-  $('#comments').innerHTML=items.length?items.map(c=>`<div class="reader-comment"><span class="comment-avatar" aria-hidden="true">${esc((c.name||'R').trim().slice(0,1).toUpperCase())}</span><div class="comment-content"><div class="comment-byline"><strong>${esc(c.name||'Reader')}</strong><time class="meta">${date(c.created_at)}</time></div><p>${esc(c.body)}</p></div></div>`).join(''):'<div class="empty-comment">No comments yet. Start the conversation.</div>';
+const relatedPosts=p=>{
+ const options=published().filter(x=>x.id!==p.id).sort((a,b)=>Number(b.category===p.category)-Number(a.category===p.category)).slice(0,3);
+ return options.length?cards(options):'<p class="muted">More thoughtful stories are on the way. Explore our latest articles in the meantime.</p>';
+};
+async function article(sl){const p=published().find(p=>p.slug===sl);if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt,absoluteCover(p.cover_url),'article');articleSchema(p);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${paragraphs(p.body)}</div><div class="engage"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div><section class="related-reading" aria-labelledby="related-title"><div class="section-head"><div><div class="eyebrow">Discover more</div><h2 id="related-title">Continue reading</h2></div><a href="/articles">Browse all articles →</a></div>${relatedPosts(p)}</section></article>`);await loadEngagement(p)}
+function renderComments(items, helpfulCounts={}, articlePost=null){
+  const count=items.length;
+  $('#commentcount').textContent=`${count} ${count===1?'comment':'comments'}`;
+  const parents=items.filter(c=>!c.parent_id);
+  const children=new Map();
+  for(const c of items.filter(c=>c.parent_id)){
+    if(!children.has(c.parent_id))children.set(c.parent_id,[]);
+    children.get(c.parent_id).push(c);
+  }
+  const card=(c,isReply=false)=>{
+    const n=helpfulCounts[c.id]||0;
+    const voted=!!localStorage.getItem('nh-helpful-'+c.id);
+    return `<div class="reader-comment ${isReply?'reader-reply':''}"><span class="comment-avatar" aria-hidden="true">${esc((c.name||'R').trim().slice(0,1).toUpperCase())}</span><div class="comment-content"><div class="comment-byline"><strong>${esc(c.name||'Reader')}</strong>${c.is_author?'<span class="author-badge">Author</span>':''}<time class="meta">${date(c.created_at)}</time></div><p>${esc(c.body)}</p><div class="comment-actions"><button type="button" class="comment-action" data-helpful="${c.id}" ${voted?'disabled':''} aria-label="Mark comment helpful">♡ Helpful${n?' · '+n:''}</button>${!isReply?`<button type="button" class="comment-action" data-reply="${c.id}">↳ Reply</button>`:''}${n?`<span class="helpful-label">${n} ${n===1?'person':'people'} found this helpful</span>`:''}</div>${!isReply?`<div class="reply-container" id="reply-${c.id}"></div>`:''}</div></div>`;
+  };
+  $('#comments').innerHTML=parents.length?parents.map(c=>{
+    const replies=children.get(c.id)||[];
+    return `<div class="comment-thread">${card(c)}${replies.length?`<div class="reply-thread">${replies.map(r=>card(r,true)).join('')}</div>`:''}</div>`;
+  }).join(''):'<div class="empty-comment">No comments yet. Start the conversation.</div>';
+  if(!articlePost)return;
+  $('#comments').querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>{
+    const area=document.getElementById('reply-'+b.dataset.reply);
+    if(area.querySelector('form')){area.innerHTML='';return}
+    document.querySelectorAll('.reply-container').forEach(el=>el.innerHTML='');
+    area.innerHTML=`<form class="reply-form" data-parent="${b.dataset.reply}"><label>Your name (optional)<input class="field reply-name" maxlength="60" placeholder="Your name"></label><label>Your reply<textarea class="field reply-text" minlength="3" maxlength="1500" required placeholder="Write a thoughtful reply…"></textarea></label><div class="reply-actions"><button type="submit" class="btn small">Post reply</button><button type="button" class="btn small ghost reply-cancel">Cancel</button></div><div class="reply-status" role="status"></div></form>`;
+    area.querySelector('.reply-cancel').onclick=()=>area.innerHTML='';
+    area.querySelector('form').onsubmit=async e=>{
+      e.preventDefault();const form=e.currentTarget,btn=form.querySelector('[type=submit]');btn.disabled=true;
+      let visitor=localStorage.getItem('nh-comment-visitor');
+      if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
+      const {error:err}=await db.from('comments').insert({post_id:articlePost.id,parent_id:form.dataset.parent,name:form.querySelector('.reply-name').value.trim()||'Reader',body:form.querySelector('.reply-text').value.trim(),visitor_id:visitor});
+      if(err){form.querySelector('.reply-status').textContent='Unable to submit reply. Please try again later.';btn.disabled=false}
+      else{await refreshEngagement(articlePost);$('#commentstatus').innerHTML=status('Reply received. It will appear when approved if additional review is needed.')}
+    };
+  });
+  $('#comments').querySelectorAll('[data-helpful]').forEach(b=>b.onclick=async()=>{
+    if(b.disabled)return;b.disabled=true;
+    let visitor=localStorage.getItem('nh-helpful-visitor');
+    if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-helpful-visitor',visitor)}
+    const {error:err}=await db.from('comment_helpful').insert({comment_id:b.dataset.helpful,visitor_id:visitor});
+    if(!err||err.code==='23505'){localStorage.setItem('nh-helpful-'+b.dataset.helpful,'1');await refreshEngagement(articlePost)}
+    else{b.disabled=false;$('#commentstatus').innerHTML=error('Unable to save that helpful vote right now.')}
+  });
 }
 async function refreshEngagement(p){
   if(!db)return;
-  const [countRes,commentsRes]=await Promise.all([
+  const [countRes,commentsRes,helpfulRes]=await Promise.all([
     db.rpc('get_like_count',{p_post_id:p.id}),
-    db.from('comments').select('name,body,created_at').eq('post_id',p.id).eq('status','approved').order('created_at',{ascending:false}).limit(100)
+    db.from('comments').select('id,parent_id,name,body,created_at,is_author').eq('post_id',p.id).eq('status','approved').order('created_at',{ascending:true}).limit(200),
+    db.rpc('journal_comment_helpful_counts',{p_post_id:p.id})
   ]);
   $('#likes').textContent=countRes.data??0;
-  if(commentsRes.error){$('#comments').innerHTML=error('Unable to load comments right now.');return}
-  renderComments(commentsRes.data||[]);
+  if(commentsRes.error){$('#comments').innerHTML=error('Unable to load comments right now.');console.warn(commentsRes.error);return}
+  const counts=Object.fromEntries((helpfulRes.data||[]).map(x=>[x.comment_id,Number(x.helpful_count)||0]));
+  if(helpfulRes.error)console.warn('Helpful counts:',helpfulRes.error);
+  renderComments(commentsRes.data||[],counts,p);
 }
 async function loadEngagement(p){
   if(!db){$('#likes').textContent='0';renderComments([]);$('#like').disabled=true;$('#commentform').onsubmit=e=>{e.preventDefault();$('#commentstatus').innerHTML=error('Database not connected.')};return}
@@ -72,29 +182,186 @@ async function loadEngagement(p){
     let visitor=localStorage.getItem('nh-visitor');
     if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-visitor',visitor)}
     const {error:err}=await db.from('likes').insert({post_id:p.id,visitor_id:visitor});
-    if(!err||err.code==='23505'){
-      localStorage.setItem(storageKey,'1');$('#like').disabled=true;await refreshEngagement(p)
-    } else alert('Unable to record your like right now.');
+    if(!err||err.code==='23505'){localStorage.setItem(storageKey,'1');$('#like').disabled=true;await refreshEngagement(p)}
+    else alert('Unable to record your like right now.');
   };
   $('#commentform').onsubmit=async e=>{
-    e.preventDefault();
-    const name=$('#commentname').value.trim(),body=$('#commenttext').value.trim();
+    e.preventDefault();const name=$('#commentname').value.trim(),body=$('#commenttext').value.trim();
     if(body.length<3)return;
     let visitor=localStorage.getItem('nh-comment-visitor');
     if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
     const button=$('#commentform button');button.disabled=true;
     const {error:err}=await db.from('comments').insert({post_id:p.id,name:name||'Reader',body,visitor_id:visitor});
-    if(err){
-      console.warn('Comment submission:',err);
-      $('#commentstatus').innerHTML=error('We could not accept your comment. Please try again later, and avoid links or personal details.');
-    }else{
-      $('#commentstatus').innerHTML=status('Thanks! Your comment was received. Comments that pass our checks appear automatically; others await review.');
-      $('#commentform').reset();await refreshEngagement(p);
-    }
+    if(err){console.warn('Comment submission:',err);$('#commentstatus').innerHTML=error('We could not accept your comment. Please try again later.')}
+    else{$('#commentstatus').innerHTML=status('Thanks! Your comment was received. Comments that pass our checks appear automatically; others await review.');$('#commentform').reset();await refreshEngagement(p)}
     button.disabled=false;
   };
 }
-function simple(which){const pages={about:['About the Journal',`The Noble Hart Journal is a growing space for thoughtful stories, useful guides and everyday inspiration. Our aim is to share ideas that spark curiosity, help people connect and make ordinary moments more meaningful.\n\nWe publish across different subjects and seasons, with a commitment to clear writing and practical value.`],contact:['Contact',`We welcome thoughtful questions, feedback and collaboration enquiries.\n\nA public contact email has not been configured yet. Please add your preferred contact address in this page before launch.`],privacy:['Privacy Policy',`Last updated: November 2026\n\nThis site uses Supabase to store published content, reader likes and submitted comments. When you comment, we collect the name you choose to provide, your comment text and the submission time. Comments are reviewed before publication. We do not request email addresses in comments.\n\nLikes use a randomly generated identifier stored in your browser to reduce accidental repeat likes. This is not a guarantee against repeat voting. Hosting and backend providers may process technical data such as IP addresses for security and service operation.\n\nThis publication is intended for adults and is not directed to children under 13. Please do not submit sensitive or personal information in comments.\n\nTo request removal of a comment or ask about your data, use the contact details once published on our Contact page. Review this policy and add your real contact information before launch.`],disclosure:['Editorial & Affiliate Disclosure',`We aim to distinguish editorial recommendations from advertising. Some future posts may contain affiliate links. If affiliate links are added, each relevant post will disclose that relationship clearly before the links.\n\nNo affiliate partnership is implied by this starter website. Any required programme-specific disclosure must be added before affiliate links go live.`]};let [title,body]=pages[which];meta(title);frame(`<div class="pagehead"><div class="wrap"><div class="eyebrow">Noble Hart</div><h1>${title}</h1></div></div><section class="section"><div class="wrap prose article-body">${paragraphs(body)}</div></section>`)}
+function contactFormHTML(){
+ const cfg=INTEGRATIONS.emailjs;
+ if(!cfg.serviceId||!cfg.templateId||!cfg.publicKey||!cfg.recaptchaSiteKey)return '';
+ return `<section class="contact-form-wrap" aria-labelledby="contact-form-title"><h2 id="contact-form-title">Send us a message</h2><p>Use this form for editorial enquiries or feedback. Do not include passwords or sensitive personal information.</p>
+ <form id="contact-form"><div class="contact-fields"><label>Your name<input class="field" name="from_name" maxlength="80" required autocomplete="name"></label><label>Your email<input class="field" type="email" name="reply_to" maxlength="254" required autocomplete="email"></label></div>
+ <label>Subject<input class="field" name="subject" maxlength="120" required></label>
+ <label>Message<textarea class="field" name="message" minlength="10" maxlength="3000" rows="6" required></textarea></label>
+ <label class="visually-hidden" aria-hidden="true">Leave this field blank<input name="website" tabindex="-1" autocomplete="off"></label>
+ <div id="contact-captcha" class="g-recaptcha" data-sitekey="${esc(cfg.recaptchaSiteKey)}"></div>
+ <button class="btn" type="submit">Send message</button><p id="contact-message" role="status" aria-live="polite"></p></form></section>`;
+}
+function wireContactForm(){
+ const form=$('#contact-form');if(!form)return;
+ if(!window.grecaptcha){
+  const script=document.createElement('script');script.src='https://www.google.com/recaptcha/api.js';script.async=true;script.defer=true;document.head.appendChild(script);
+ }
+ form.onsubmit=async e=>{
+  e.preventDefault();const msg=$('#contact-message'),button=form.querySelector('[type=submit]');
+  const data=new FormData(form);if(data.get('website'))return;
+  const captcha=window.grecaptcha?.getResponse?.();
+  if(!captcha){msg.textContent='Please complete the verification first.';return}
+  const last=Number(sessionStorage.getItem('nh-contact-last')||0);
+  if(Date.now()-last<60000){msg.textContent='Please allow a minute between messages.';return}
+  button.disabled=true;msg.textContent='Sending…';
+  try{
+   const r=await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:INTEGRATIONS.emailjs.serviceId,template_id:INTEGRATIONS.emailjs.templateId,user_id:INTEGRATIONS.emailjs.publicKey,template_params:{from_name:String(data.get('from_name')),reply_to:String(data.get('reply_to')),subject:String(data.get('subject')),message:String(data.get('message')),'g-recaptcha-response':captcha}})});
+   if(!r.ok)throw new Error('Delivery unavailable');
+   sessionStorage.setItem('nh-contact-last',String(Date.now()));form.reset();msg.textContent='Thank you. Your message has been sent.';
+  }catch(err){console.warn('Contact email failed',err);msg.textContent='We could not send your message. Please email noblehart01@gmail.com directly.'}
+  finally{window.grecaptcha?.reset?.();button.disabled=false}
+ };
+}
+
+function simple(which){
+ const pages={
+ about:['About The Noble Hart Journal',`The Noble Hart Journal is an independent editorial space dedicated to ideas worth sharing and stories worth reading.
+
+## Thoughtful content for everyday life
+We believe the best articles offer more than information. They spark curiosity, make difficult decisions simpler, encourage meaningful connections and give readers something useful to carry into everyday life.
+
+Our Journal covers family experiences, practical lifestyle ideas, creativity, personal interests, seasonal inspiration and thoughtful gift recommendations. We are not limited to one celebration, trend or product category.
+
+## What you can expect
+**Helpful articles:** Clear, approachable writing with practical takeaways you can use.
+
+**Family and connection:** Activities, conversations and experiences that bring people together across generations.
+
+**Thoughtful gift guides:** Carefully researched ideas for different people, occasions and interests, with a focus on suitability rather than hype.
+
+**A welcoming discussion space:** Opportunities to exchange respectful insights and learn from other readers.
+
+## Our editorial values
+We aim to write clearly, research responsibly, be transparent about commercial relationships and correct important mistakes when we identify them. We distinguish firsthand experience from research-based recommendations and do not assume that every suggestion suits every reader.
+
+## A Journal that keeps growing
+The Noble Hart Journal is developing its library of articles and guides. New topics and features will be added thoughtfully as the publication grows.
+
+We are glad you're here. Explore our articles, discover a gift idea, or share a thoughtful perspective.
+
+**The Noble Hart Journal — Ideas worth sharing. Stories worth reading.**`],
+ contact:['Contact The Noble Hart Journal',`Have a question, article suggestion, correction or collaboration idea? We'd be glad to hear from you.
+
+## Get in touch
+**Email:** [noblehart01@gmail.com](mailto:noblehart01@gmail.com)
+
+For general enquiries, reader feedback, correction requests, potential collaborations and editorial questions, please contact us using the email above.
+
+## Privacy and data requests
+If you want to request the removal of a comment, ask about a newsletter request or exercise a privacy right, please email us with **Privacy Request** in the subject line. Share only the information needed to help us locate and address your request. We may need to verify that a request relates to your information before taking action.
+
+## Editorial corrections
+We aim for accurate, useful writing. If you notice an error in an article, please include its title or page link and a short explanation so we can review it.
+
+## Collaborations and product enquiries
+We welcome relevant professional enquiries. Please clearly describe the opportunity and any commercial relationship. We do not promise coverage or positive reviews in exchange for compensation or complimentary products.
+
+**Please note:** We cannot provide individual customer support for independent retailers linked from our gift guides. For orders, shipping, returns and product warranties, contact the retailer directly.
+
+Thank you for helping us make The Noble Hart Journal more useful.`],
+ privacy:['Privacy Policy',`**Last updated: 15 November 2026**
+
+## 1. Who we are
+The Noble Hart Journal (“we”, “our” or “the Journal”) publishes articles, gift guides and reader discussions. This Policy explains how personal information is handled when you use our website.
+
+**Contact:** [noblehart01@gmail.com](mailto:noblehart01@gmail.com)
+
+## 2. Information we collect
+**Information you choose to provide:** Your chosen display name and comment or reply text, email address when you request newsletter updates, and information you include in a message sent to us.
+
+**Website interaction information:** We may use browser-based identifiers and local storage to support likes, helpful votes and newsletter-invitation preferences. Our hosting and service providers may also process technical information such as IP address, device/browser information and request logs to provide, secure and maintain the website.
+
+Please do not share sensitive information in public comments.
+
+## 3. Why we process information
+We use information to operate our articles and discussions; publish and moderate comments; record reader interactions; manage newsletter requests; respond to enquiries; investigate abuse and spam; and maintain security and reliability.
+
+Where applicable, the legal bases for processing include your consent (for optional marketing), our legitimate interests in running and protecting the website where permitted, and compliance with legal obligations. We will ask for consent separately where it is legally required.
+
+## 4. Public comments and replies
+If approved or automatically published after screening, your comment and chosen name, along with a date, may be visible to other visitors. Some comments are held for moderation. Automated screening is imperfect; we may edit the visibility of or remove content that violates our community standards.
+
+Do not post private information about yourself or another person. Published content may be copied by others outside our control.
+
+## 5. Likes, helpful votes and browser storage
+We use local browser storage and identifiers to support some features, including reducing accidental repeat likes or helpful votes and remembering whether a newsletter invitation was dismissed. Counts are not identity-verified measures of unique individuals. You can clear stored identifiers using browser settings, though this may reset preferences.
+
+If non-essential tracking or advertising technologies are introduced, we will update this Policy and provide additional controls or consent where required.
+
+## 6. Newsletter requests
+You may voluntarily provide an email address to request updates. ${INTEGRATIONS.brevoSignupUrl?"Subscriptions are processed through our newsletter email provider, which provides sign-up confirmation and unsubscribe arrangements.":"**At present, the website records newsletter requests but does not send newsletters.** Before regular marketing emails begin, we plan to implement confirmation and a functioning unsubscribe mechanism."} We will not treat comments or likes as permission to send marketing emails.
+
+You can ask us to withdraw or remove a newsletter request by contacting [noblehart01@gmail.com](mailto:noblehart01@gmail.com).
+
+## 7. Service providers, external links and international processing
+We use third-party services for hosting, storage and website operations. Such providers may process information as required to deliver and protect the service, including potentially in countries outside yours. We seek to apply applicable legal protections to relevant international processing.
+
+Our articles may link to independent websites and retailers. Their own privacy practices apply after you leave our website. We do not sell newsletter email addresses to advertisers.
+
+## 8. Retention and security
+We keep information for as long as reasonably needed for the purposes described here, including moderation, security and legal obligations. Public comments may remain while the relevant discussion is available unless removed. We review requests for deletion subject to relevant legal exceptions.
+
+We take reasonable technical and organisational steps to protect information; no online service can promise complete security.
+
+## 9. Your rights
+Depending on applicable law, you may have rights to access, correct, delete or restrict processing of your personal information, object to certain uses, withdraw consent or ask for data portability.
+
+To make a request, email [noblehart01@gmail.com](mailto:noblehart01@gmail.com) with **Privacy Request** in the subject line. We may request reasonable verification before responding. Where applicable, you may complain to the Nigeria Data Protection Commission or another competent authority.
+
+## 10. Children's privacy
+The Journal publishes family-friendly content, but its interactive features are not designed to collect information from children under 13 independently. We do not knowingly solicit their personal data through comments or newsletter forms. Parents and guardians should supervise children's online activities.
+
+## 11. Policy updates
+We may revise this Policy when our features, practices or legal obligations change. The updated date above will show when we last revised it. For questions, contact [noblehart01@gmail.com](mailto:noblehart01@gmail.com).`],
+ disclosure:['Editorial & Affiliate Disclosure',`**Last updated: 15 November 2026**
+
+## Our commitment
+The Noble Hart Journal aims to publish helpful, thoughtfully researched articles and gift guides. We value editorial independence, accuracy and transparency about commercial relationships.
+
+## How recommendations are prepared
+We may consider product descriptions, specifications, suitability, value, availability, published reviews and other relevant sources when making recommendations. Unless explicitly stated, we have not necessarily purchased or personally tested every product mentioned. We distinguish firsthand experience from research-based suggestions wherever relevant.
+
+## Affiliate links and commissions
+Some current or future guides may include affiliate links. If you purchase through a qualifying link, we may receive a commission, generally without increasing the price you pay. This helps support the Journal.
+
+When affiliate links are used, we will disclose the relationship clearly within the relevant article, near its recommendations. **We do not imply an affiliate partnership unless one actually exists.**
+
+## Sponsored content and products
+If an article is sponsored, paid for, or involves free products or another material connection, we will identify that relationship clearly. Compensation does not guarantee a favourable review.
+
+## Prices, availability and retailers
+Prices, availability, specifications, delivery terms and promotional offers may change. Check current information directly with the relevant retailer before buying. Independent retailers handle their own payments, shipping, returns and warranties.
+
+## External links and editorial responsibility
+External links are provided for reference and convenience. We do not control external websites or guarantee their information, security or product performance. Our articles are general editorial information and are not a substitute for specialist professional advice where that is appropriate.
+
+## Corrections and feedback
+If you believe something is inaccurate, out of date or inadequately disclosed, email [noblehart01@gmail.com](mailto:noblehart01@gmail.com). Include the relevant article link and a description of the concern.
+
+**Contact:** [noblehart01@gmail.com](mailto:noblehart01@gmail.com)
+
+Thank you for supporting The Noble Hart Journal.`]
+ };
+ const [title,body]=pages[which];meta(title);frame(`<div class="pagehead"><div class="wrap"><div class="eyebrow">Noble Hart / The Journal</div><h1>${esc(title)}</h1><p>${which==='about'?'Discover the ideas and values behind our publication.':which==='contact'?'Questions, ideas and thoughtful conversations are always welcome.':which==='privacy'?'How we handle reader information.':'How we approach recommendations, links and commercial relationships.'}</p></div></div><section class="section"><div class="wrap prose article-body legal-page">${paragraphs(body)}${which==='contact'?contactFormHTML():''}</div></section>`);if(which==='contact')wireContactForm();
+}
+
 async function initialize(){
   // Show the public blog instantly. Never leave #app empty while waiting for third-party scripts.
   render();
@@ -116,7 +383,7 @@ async function initialize(){
       if(adminError) console.warn('Admin lookup:',adminError);
       state.admin=!!admin;
     }
-    render();
+    render();wireNewsletterPopup();
   } catch(e){
     console.error('Journal connection failed:',e);
     connectionIssue='The Journal is available, but articles and sign-in could not connect to Supabase. Check your connection, API settings and browser console.';
@@ -158,7 +425,7 @@ function editorAdmin(){
         <button type="button" data-format="bullets" title="Bulleted list">• List</button>
         <button type="button" data-format="numbered" title="Numbered list">1. List</button>
         <button type="button" data-format="quote">❝ Quote</button>
-        <button type="button" data-format="link">🔗 Link</button>
+        <button type="button" id="open-link-dialog" title="Insert a link in selected text">🔗 Link</button>
         <button type="button" id="toggle-preview" aria-pressed="false">Preview</button>
       </div>
       <textarea id="postbody" class="field editor-body" name="body" required>${esc(p.body||'')}</textarea>
@@ -168,18 +435,14 @@ function editorAdmin(){
     <label class="full">Image alternative text<input class="field" name="cover_alt" value="${esc(p.cover_alt||'')}"></label>
     <label>SEO title<input class="field" name="seo_title" value="${esc(p.seo_title||'')}"></label>
     <label>SEO description<input class="field" name="seo_description" value="${esc(p.seo_description||'')}"></label>
-    </div><div class="actions"><button class="btn" type="submit">${p.id?'Save changes':'Create article'}</button><button type="button" class="btn ghost" id="cancel">Cancel</button></div><div id="saveinfo" role="status" aria-live="polite"></div></form></div>`;
+    </div><div class="actions"><button class="btn" type="submit">${p.id?'Save changes':'Create article'}</button><button type="button" class="btn ghost" id="cancel">Cancel</button></div><div id="saveinfo" role="status" aria-live="polite"></div></form></div>
+    <dialog id="link-dialog" class="journal-modal"><form id="link-form"><h2>Insert a link</h2><p class="muted">Selected text becomes a clickable link in your article.</p><label>Text to display<input class="field" id="link-text" required maxlength="300"></label><label>Link URL<input class="field" id="link-url" type="url" placeholder="https://example.com" required></label><div class="link-dialog-actions"><button class="btn ghost" id="paste-link" type="button">⧉ Paste URL</button><button class="btn ghost" id="cancel-link" type="button">Cancel</button><button class="btn" type="submit">Insert link</button></div><p class="link-error" id="link-error" role="alert"></p></form></dialog>`;
   const body=$('#postbody'),preview=$('#editor-preview');$('#open-media').onclick=()=>{state.view='media';drawAdmin()};
   const insertFormat=type=>{
     const a=body.selectionStart,b=body.selectionEnd,selected=body.value.slice(a,b);
     let replacement=selected||'your text';
     if(type==='bold')replacement=`**${replacement}**`;
     if(type==='italic')replacement=`*${replacement}*`;
-    if(type==='link'){
-      const url=prompt('Enter full URL, beginning with https://','https://');
-      if(!url||!/^https?:\/\//i.test(url))return;
-      replacement=`[${selected||'link text'}](${url})`;
-    }
     if(['h2','h3','quote','bullets','numbered'].includes(type)){
       const prefix={h2:'## ',h3:'### ',quote:'> ',bullets:'- ',numbered:'1. '}[type];
       replacement=(selected||'Text').split('\n').map((line,i)=>type==='numbered'?`${i+1}. ${line}`:`${prefix}${line}`).join('\n');
@@ -188,6 +451,20 @@ function editorAdmin(){
     }
     body.setRangeText(replacement,a,b,'select');body.focus();
     if(!preview.hidden)preview.innerHTML=paragraphs(body.value);
+  };
+  const linkDialog=$('#link-dialog');let linkStart=0,linkEnd=0;
+  $('#open-link-dialog').onclick=()=>{
+    linkStart=body.selectionStart;linkEnd=body.selectionEnd;
+    $('#link-text').value=body.value.slice(linkStart,linkEnd)||'';$('#link-url').value='';$('#link-error').textContent='';
+    linkDialog.showModal();($('#link-text').value?$('#link-url'):$('#link-text')).focus();
+  };
+  $('#cancel-link').onclick=()=>linkDialog.close();
+  $('#paste-link').onclick=async()=>{try{$('#link-url').value=await navigator.clipboard.readText();$('#link-error').textContent=''}catch{$('#link-error').textContent='Paste is unavailable in this browser. Use Ctrl+V (or Cmd+V) instead.'}};
+  $('#link-form').onsubmit=e=>{
+    e.preventDefault();const label=$('#link-text').value.trim(),url=$('#link-url').value.trim();
+    if(!label||!/^(https?:\/\/)[^\s<>\[\]()]+$/i.test(url)){$('#link-error').textContent='Enter text and a complete http:// or https:// link without spaces or parentheses.';return}
+    const replacement=`[${label.replace(/[\[\]]/g,'')}](${url})`;
+    body.setRangeText(replacement,linkStart,linkEnd,'end');linkDialog.close();body.focus();if(!preview.hidden)preview.innerHTML=paragraphs(body.value);
   };
   document.querySelectorAll('[data-format]').forEach(button=>button.onclick=()=>insertFormat(button.dataset.format));
   const refreshPreview=()=>preview.innerHTML=paragraphs(body.value)||'<p class="muted">Start writing to see a preview.</p>';
@@ -213,8 +490,23 @@ function commentsAdmin(){
  const filter=state.commentFilter||'all';
  const pending=state.comments.filter(c=>c.status==='pending');
  const visible=state.comments.filter(c=>filter==='all'||c.status===filter);
- $('#adminbody').innerHTML=`<div class="panel"><p class="muted">Flagged comments await your review. Low-risk comments can publish automatically.</p><label class="admin-filter-label" for="comment-status-filter">Show comments <select class="field" id="comment-status-filter"><option value="all" ${filter==='all'?'selected':''}>All comments</option><option value="pending" ${filter==='pending'?'selected':''}>Pending (${pending.length})</option><option value="approved" ${filter==='approved'?'selected':''}>Approved</option><option value="rejected" ${filter==='rejected'?'selected':''}>Rejected</option></select></label>${visible.length?visible.map(c=>`<div class="comment"><strong>${esc(c.name||'Reader')}</strong> <span class="muted">on ${esc(c.posts?.title||'Article')} · ${esc(c.status)}</span><p>${esc(c.body)}</p><div class="actions">${c.status!=='approved'?`<button class="btn small" data-status="approved" data-id="${c.id}">Approve</button>`:''}${c.status!=='rejected'?`<button class="btn small ghost" data-status="rejected" data-id="${c.id}">Reject</button>`:''}<button class="btn small danger" data-status="delete" data-id="${c.id}">Delete</button></div></div>`).join(''):'<p>No comments match this filter.</p>'}</div>`;
+ $('#adminbody').innerHTML=`<div class="panel"><p class="muted">Flagged comments await your review. Low-risk comments can publish automatically.</p><label class="admin-filter-label" for="comment-status-filter">Show comments <select class="field" id="comment-status-filter"><option value="all" ${filter==='all'?'selected':''}>All comments</option><option value="pending" ${filter==='pending'?'selected':''}>Pending (${pending.length})</option><option value="approved" ${filter==='approved'?'selected':''}>Approved</option><option value="rejected" ${filter==='rejected'?'selected':''}>Rejected</option></select></label>${visible.length?visible.map(c=>`<div class="comment"><strong>${esc(c.name||'Reader')}</strong> <span class="muted">on ${esc(c.posts?.title||'Article')} · ${esc(c.status)}</span><p>${esc(c.body)}</p><div class="actions">${c.status!=='approved'?`<button class="btn small" data-status="approved" data-id="${c.id}">Approve</button>`:''}${c.status==='approved'&&!c.parent_id?`<button class="btn small ghost" data-admin-reply="${c.id}">Reply as author</button>`:''}${c.status!=='rejected'?`<button class="btn small ghost" data-status="rejected" data-id="${c.id}">Reject</button>`:''}<button class="btn small danger" data-status="delete" data-id="${c.id}">Delete</button></div></div>`).join(''):'<p>No comments match this filter.</p>'}</div>`;
  $('#comment-status-filter').onchange=e=>{state.commentFilter=e.target.value;commentsAdmin()};
+  document.querySelectorAll('[data-admin-reply]').forEach(button=>button.onclick=()=>{
+    const c=state.comments.find(x=>String(x.id)===button.dataset.adminReply);
+    if(!c)return;
+    const host=button.closest('.comment');let form=host.querySelector('.admin-reply-form');
+    if(form){form.remove();return}
+    form=document.createElement('form');form.className='admin-reply-form';
+    form.innerHTML='<label>Author reply<textarea class="field" required minlength="3" maxlength="1500" placeholder="Reply to this reader…"></textarea></label><button class="btn small" type="submit">Publish author reply</button><div role="status" class="reply-status"></div>';
+    host.appendChild(form);
+    form.onsubmit=async e=>{e.preventDefault();const submit=form.querySelector('button');submit.disabled=true;
+      let visitor=localStorage.getItem('nh-comment-visitor');if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
+      const {error:err}=await db.from('comments').insert({post_id:c.post_id,parent_id:c.id,name:'Noble Hart',body:form.querySelector('textarea').value.trim(),visitor_id:visitor});
+      if(err){form.querySelector('.reply-status').textContent=err.message;submit.disabled=false}
+      else{await loadAdmin();drawAdmin()}
+    };
+  });
  document.querySelectorAll('[data-status]').forEach(b=>b.onclick=async()=>{const res=b.dataset.status==='delete'?await db.from('comments').delete().eq('id',b.dataset.id):await db.from('comments').update({status:b.dataset.status}).eq('id',b.dataset.id);if(res.error)alert(res.error.message);else{await loadAdmin();drawAdmin()}})
 }
 function likesAdmin(){
@@ -236,10 +528,19 @@ async function mediaAdmin(){
  const grid=$('#media-grid'),more=$('#media-more'),info=$('#media-status');let offset=0;let collected=[];let done=false;
  function draw(){const q=$('#media-search').value.trim().toLowerCase();const items=collected.filter(x=>x.name.toLowerCase().includes(q));grid.innerHTML=items.map(x=>{
    const url=db.storage.from('journal-images').getPublicUrl(x.name).data.publicUrl;
-   return `<div class="media-item"><img loading="lazy" src="${esc(url)}" alt="Uploaded image ${esc(x.name)}"><div class="media-item-info"><strong title="${esc(x.name)}">${esc(x.name)}</strong><small>${esc(date(x.created_at))}</small><div class="media-actions"><button class="btn small ghost" data-copy="${esc(url)}" type="button">⧉ Copy URL</button><button class="btn small ghost" data-download="${esc(x.name)}" type="button">↓ Download</button></div></div></div>`
+   return `<div class="media-item"><img loading="lazy" src="${esc(url)}" alt="Uploaded image ${esc(x.name)}"><div class="media-item-info"><strong title="${esc(x.name)}">${esc(x.name)}</strong><small>${esc(date(x.created_at))}</small><div class="media-actions"><button class="btn small ghost" data-copy="${esc(url)}" type="button">⧉ Copy URL</button><button class="btn small ghost" data-download="${esc(x.name)}" type="button">↓ Download</button><button class="btn small danger" data-delete-media="${esc(x.name)}" type="button" title="Delete image permanently">🗑 Delete</button></div></div></div>`
  }).join('')||'<p class="muted">No images match. Upload your first image or change the search.</p>';
  grid.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.copy);const t=b.textContent;b.textContent='✓ Copied';setTimeout(()=>b.textContent=t,1500)}catch{info.textContent='Clipboard unavailable. You can copy the URL from the browser address when the image opens.'}});
  grid.querySelectorAll('[data-download]').forEach(b=>b.onclick=async()=>{b.disabled=true;const {data,error:err}=await db.storage.from('journal-images').download(b.dataset.download);if(err){info.textContent='Download failed: '+err.message}else{const url=URL.createObjectURL(data),a=document.createElement('a');a.href=url;a.download=b.dataset.download;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}b.disabled=false});
+  grid.querySelectorAll('[data-delete-media]').forEach(b=>b.onclick=async()=>{
+    const name=b.dataset.deleteMedia;const imgUrl=db.storage.from('journal-images').getPublicUrl(name).data.publicUrl;
+    const used=state.posts.filter(p=>p.cover_url===imgUrl);
+    if(used.length){info.textContent=`This image is used as a featured image in ${used.length} article(s). Replace those images before deleting it.`;return}
+    if(!confirm(`Permanently delete ${name} from your Media Library and cloud storage? This cannot be undone, and any external links to this image will stop working.`))return;
+    b.disabled=true;const {error:err}=await db.storage.from('journal-images').remove([name]);
+    if(err){info.textContent='Could not delete: '+err.message;b.disabled=false;return}
+    collected=collected.filter(x=>x.name!==name);info.textContent='Image deleted from cloud storage.';draw();
+  });
  }
  async function fetchMore(){if(done)return;more.disabled=true;info.textContent='Loading images…';const {data,error:err}=await db.storage.from('journal-images').list('',{limit:100,offset,sortBy:{column:'created_at',order:'desc'}});if(err){info.textContent='Unable to load library: '+err.message;more.disabled=false;return}const batch=(data||[]).filter(x=>x.name&&!x.name.endsWith('/'));collected=[...collected,...batch];offset+=(data||[]).length;done=(data||[]).length<100;more.hidden=done;more.disabled=false;info.textContent=collected.length+' image(s) loaded';draw()}
  more.onclick=fetchMore;$('#media-search').oninput=draw;
