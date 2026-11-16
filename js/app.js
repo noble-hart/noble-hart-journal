@@ -726,6 +726,7 @@ function editorAdmin(){
    updateBodyMode();
    $('#open-media').onclick=()=>{state.view='media';drawAdmin()};
   const insertFormat=type=>{
+    if(body.value.startsWith(RICH_HTML_PREFIX))return;
     const a=body.selectionStart,b=body.selectionEnd,selected=body.value.slice(a,b);
     let replacement=selected||'your text';
     if(type==='bold')replacement=`**${replacement}**`;
@@ -762,7 +763,7 @@ function editorAdmin(){
     if(showing)refreshPreview();
   };
   body.oninput=()=>{updateBodyMode();if(!preview.hidden)refreshPreview()};
-  body.onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&['b','i'].includes(e.key.toLowerCase())){e.preventDefault();insertFormat(e.key.toLowerCase()==='b'?'bold':'italic')}};
+  body.onkeydown=e=>{if(body.value.startsWith(RICH_HTML_PREFIX))return;if((e.ctrlKey||e.metaKey)&&['b','i'].includes(e.key.toLowerCase())){e.preventDefault();insertFormat(e.key.toLowerCase()==='b'?'bold':'italic')}};
   $('#cancel').onclick=()=>{state.view='posts';drawAdmin()};
   $('#postform').onsubmit=async e=>{
     e.preventDefault();const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
