@@ -114,6 +114,14 @@ const inlineMarkdown = value => {
   t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
   return t;
 };
+const safeArticleImageURL=raw=>{
+  if(typeof raw!=='string'||raw.length>2000||!/^https?:\/\//i.test(raw))return '';
+  try {const url=new URL(raw);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return ''}
+};
+const articleImageHTML=(url,alt)=>{
+  const source=safeArticleImageURL(url);
+  return source?`<figure class="journal-inline-figure"><img loading="lazy" decoding="async" src="${esc(source)}" alt="${esc(alt)}"></figure>`:'';
+};
 const paragraphs = body => {
   const lines=String(body||'').replace(/\r\n/g,'\n').split('\n');
   const out=[];let para=[],items=[],listType='';
@@ -125,6 +133,8 @@ const paragraphs = body => {
     const bullet=line.match(/^[-*]\s+(.+)$/);
     const numbered=line.match(/^\d+[.)]\s+(.+)$/);
     const quote=line.match(/^>\s*(.+)$/);
+    const image=line.match(/^!\[([^\]\n]{0,180})\]\((https?:\/\/[^\s)"'<>]+)\)$/i);
+    if(image){flushPara();flushList();const img=articleImageHTML(image[2],image[1]);if(img)out.push(img);continue}
     if(heading||quote){flushPara();flushList();if(heading){const level=Math.max(2,heading[1].length);out.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`)}else out.push(`<blockquote>${inlineMarkdown(quote[1])}</blockquote>`);continue}
     if(bullet||numbered){flushPara();const next=bullet?'ul':'ol';if(listType&&listType!==next)flushList();listType=next;items.push((bullet||numbered)[1]);continue}
     flushList();para.push(line);
@@ -134,7 +144,7 @@ const paragraphs = body => {
 
 // HTML gift-guide support: sanitize on import, preview and public rendering.
 const RICH_HTML_PREFIX='<!--NH_RICH_HTML_V1-->';
-const richTags=new Set(['P','H2','H3','H4','STRONG','B','EM','I','A','UL','OL','LI','BLOCKQUOTE','BR','HR','DIV','SPAN','TABLE','THEAD','TBODY','TR','TH','TD']);
+const richTags=new Set(['P','H2','H3','H4','STRONG','B','EM','I','A','UL','OL','LI','BLOCKQUOTE','BR','HR','DIV','SPAN','TABLE','THEAD','TBODY','TR','TH','TD','FIGURE','FIGCAPTION','IMG']);
 const richClasses=new Set(['nh-kicker','nh-check','nh-reference','nh-table-wrap','nh-note','nh-eyebrow']);
 const droppedTags=new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','FORM','INPUT','BUTTON','SELECT','TEXTAREA','SVG','MATH','LINK','META','BASE','TEMPLATE','NOSCRIPT','VIDEO','AUDIO','CANVAS']);
 function sanitizeArticleHTML(source){
@@ -161,6 +171,14 @@ function sanitizeArticleHTML(source){
         }catch{}
       }
       if(tag==='TH'&&['row','col'].includes(node.getAttribute('scope')))el.setAttribute('scope',node.getAttribute('scope'));
+      if(tag==='IMG'){
+        const src=safeArticleImageURL(node.getAttribute('src')||'');
+        if(!src)return; // Reject data:, javascript:, relative and malformed image sources.
+        el.setAttribute('src',src);
+        el.setAttribute('alt',(node.getAttribute('alt')||'').slice(0,250));
+        el.setAttribute('loading','lazy');
+        el.setAttribute('decoding','async');
+      }
       parent.appendChild(el);dest=el;
     }
     for(const child of node.childNodes)copy(child,dest);
@@ -690,6 +708,7 @@ function editorAdmin(){
         <button type="button" data-format="numbered" title="Numbered list">1. List</button>
         <button type="button" data-format="quote">❝ Quote</button>
         <button type="button" id="open-link-dialog" title="Insert a link in selected text">🔗 Link</button>
+        <button type="button" id="open-image-dialog" title="Insert an image into the article">▣ Image</button>
         <button type="button" id="toggle-preview" aria-pressed="false">Preview</button>
       </div>
       <textarea id="postbody" class="field editor-body" name="body" required>${esc(p.body||'')}</textarea>
@@ -700,6 +719,7 @@ function editorAdmin(){
     <label>SEO title<input class="field" name="seo_title" value="${esc(p.seo_title||'')}"></label>
     <label>SEO description<input class="field" name="seo_description" value="${esc(p.seo_description||'')}"></label>
     </div><div class="actions"><button class="btn" type="submit">${p.id?'Save changes':'Create article'}</button><button type="button" class="btn ghost" id="cancel">Cancel</button></div><div id="saveinfo" role="status" aria-live="polite"></div></form></div>
+    <dialog id="image-dialog" class="journal-modal"><form id="image-form"><h2>Insert image in article</h2><p class="mini muted">Place the cursor where the image should appear. Upload a new image or paste a Media Library image URL.</p><label>Upload image (optional)<input class="field" id="image-upload-file" type="file" accept="image/jpeg,image/png,image/webp"></label><label>Image URL<input class="field" id="image-url" type="url" placeholder="https://..."></label><label>Alternative text<input class="field" id="image-alt" maxlength="250" required placeholder="Describe the image for accessibility"></label><label>Caption (optional)<input class="field" id="image-caption" maxlength="240" placeholder="An optional caption below the image"></label><div class="link-dialog-actions"><button class="btn ghost" id="cancel-image" type="button">Cancel</button><button class="btn" id="insert-image" type="submit">Insert image</button></div><p class="link-error" id="image-error" role="alert"></p></form></dialog>
     <dialog id="link-dialog" class="journal-modal"><form id="link-form"><h2>Insert a link</h2><p class="muted">Selected text becomes a clickable link in your article.</p><label>Text to display<input class="field" id="link-text" required maxlength="300"></label><label>Link URL<input class="field" id="link-url" type="url" placeholder="https://example.com" required></label><div class="link-dialog-actions"><button class="btn ghost" id="paste-link" type="button">⧉ Paste URL</button><button class="btn ghost" id="cancel-link" type="button">Cancel</button><button class="btn" type="submit">Insert link</button></div><p class="link-error" id="link-error" role="alert"></p></form></dialog>`;
   const body=$('#postbody'),preview=$('#editor-preview');
    const updateBodyMode=()=>{
@@ -768,6 +788,55 @@ function editorAdmin(){
     const replacement=html?`<a href="${url.replaceAll('&','&amp;').replaceAll('"','&quot;')}">${esc(label)}</a>`:`[${label.replace(/[\[\]]/g,'')}](${url})`;
     body.setRangeText(replacement,linkStart,linkEnd,'end');linkDialog.close();body.focus();if(!preview.hidden)preview.innerHTML=richBody(body.value);
   };
+  // Insert inline images without leaving the editor. The same Media Library
+  // storage bucket is used as for featured images; no extra secret or table.
+  const imageDialog=$('#image-dialog');
+  let imageInsertStart=0,imageInsertEnd=0;
+  $('#open-image-dialog').onclick=()=>{
+    imageInsertStart=body.selectionStart;imageInsertEnd=body.selectionEnd;
+    $('#image-error').textContent='';
+    $('#image-url').value='';$('#image-upload-file').value='';
+    $('#image-alt').value='';$('#image-caption').value='';
+    imageDialog.showModal();$('#image-url').focus();
+  };
+  $('#cancel-image').onclick=()=>imageDialog.close();
+  $('#image-form').onsubmit=async e=>{
+    e.preventDefault();
+    const submit=$('#insert-image');submit.disabled=true;
+    const imageError=$('#image-error');
+    imageError.textContent='';
+    let url=$('#image-url').value.trim();
+    const file=$('#image-upload-file').files[0];
+    const alt=$('#image-alt').value.trim().slice(0,250);
+    const caption=$('#image-caption').value.trim().slice(0,240);
+    if(!alt){imageError.textContent='Please add descriptive alternative text.';submit.disabled=false;return}
+    if(file){
+      if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024){
+        imageError.textContent='Choose JPG, PNG or WebP under 5 MB.';submit.disabled=false;return;
+      }
+      const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type];
+      const key=`${crypto.randomUUID()}.${ext}`;
+      const {error:uploadError}=await db.storage.from('journal-images').upload(key,file,{contentType:file.type});
+      if(uploadError){imageError.textContent='Upload failed: '+uploadError.message;submit.disabled=false;return}
+      url=db.storage.from('journal-images').getPublicUrl(key).data.publicUrl;
+    }
+    const safe=safeArticleImageURL(url);
+    if(!safe){imageError.textContent='Enter a full HTTPS image URL or upload an image.';submit.disabled=false;return}
+    const html=body.value.startsWith(RICH_HTML_PREFIX);
+    let markup;
+    if(html){
+      const source=esc(safe),text=esc(alt);
+      markup=`<figure class="journal-inline-figure"><img src="${source}" alt="${text}" loading="lazy">${caption?`<figcaption>${esc(caption)}</figcaption>`:''}</figure>`;
+    }else{
+      // Standalone Markdown image line; optional caption uses italic Markdown.
+      const cleanAlt=alt.replace(/[\[\]]/g,'');
+      markup='\\n\\n!['+cleanAlt+']('+safe+')'+(caption?'\\n\\n*'+caption.replace(/[*\\n]/g,'')+'*':'')+'\\n\\n';
+    }
+    body.setRangeText(markup,imageInsertStart,imageInsertEnd,'end');
+    if(!preview.hidden)refreshPreview();
+    imageDialog.close();body.focus();submit.disabled=false;
+  };
+
   document.querySelectorAll('[data-format]').forEach(button=>button.onclick=()=>insertFormat(button.dataset.format));
   const refreshPreview=()=>preview.innerHTML=richBody(body.value)||'<p class="muted">Start writing to see a preview.</p>';
   $('#toggle-preview').onclick=e=>{
