@@ -1,7 +1,9 @@
+
 {
   "name": "noble-hart-journal",
   "compatibility_date": "2026-11-13",
   "main": "worker.js",
+  "keep_vars": true,
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
