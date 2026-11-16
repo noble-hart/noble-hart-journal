@@ -131,6 +131,48 @@ const paragraphs = body => {
   }
   flushPara();flushList();return out.join('\n');
 };
+
+// HTML gift-guide support: sanitize on import, preview and public rendering.
+const RICH_HTML_PREFIX='<!--NH_RICH_HTML_V1-->';
+const richTags=new Set(['P','H2','H3','H4','STRONG','B','EM','I','A','UL','OL','LI','BLOCKQUOTE','BR','HR','DIV','SPAN','TABLE','THEAD','TBODY','TR','TH','TD']);
+const richClasses=new Set(['nh-kicker','nh-check','nh-reference','nh-table-wrap','nh-note','nh-eyebrow']);
+const droppedTags=new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','FORM','INPUT','BUTTON','SELECT','TEXTAREA','SVG','MATH','LINK','META','BASE','TEMPLATE','NOSCRIPT','VIDEO','AUDIO','CANVAS']);
+function sanitizeArticleHTML(source){
+  const parsed=new DOMParser().parseFromString(String(source||''),'text/html');
+  const target=document.createElement('div'),root=parsed.body.querySelector('article')||parsed.body;
+  const copy=(node,parent)=>{
+    if(node.nodeType===3){parent.appendChild(document.createTextNode(node.textContent||''));return}
+    if(node.nodeType!==1)return;
+    const tag=node.tagName;
+    if(droppedTags.has(tag)||tag==='H1')return;
+    let dest=parent;
+    if(richTags.has(tag)){
+      const el=document.createElement(tag.toLowerCase());
+      const classes=[...node.classList].filter(c=>richClasses.has(c));
+      if(classes.length)el.className=classes.join(' ');
+      if(tag==='A'){
+        const raw=node.getAttribute('href')||'';
+        try{
+          const url=new URL(raw,location.origin);
+          if((/^https?:\/\//i.test(raw)&&['http:','https:'].includes(url.protocol))||(/^mailto:/i.test(raw)&&url.protocol==='mailto:')){
+            el.setAttribute('href',url.href);
+            if(url.protocol!=='mailto:'){el.setAttribute('target','_blank');el.setAttribute('rel','noopener noreferrer')}
+          }
+        }catch{}
+      }
+      if(tag==='TH'&&['row','col'].includes(node.getAttribute('scope')))el.setAttribute('scope',node.getAttribute('scope'));
+      parent.appendChild(el);dest=el;
+    }
+    for(const child of node.childNodes)copy(child,dest);
+  };
+  for(const child of root.childNodes)copy(child,target);
+  return target.innerHTML;
+}
+function richBody(body){
+  const value=String(body||'');
+  return value.startsWith(RICH_HTML_PREFIX)?'<div class="rich-guide">'+sanitizeArticleHTML(value.slice(RICH_HTML_PREFIX.length))+'</div>':paragraphs(value);
+}
+
 const relatedPosts=p=>{
  const options=published().filter(x=>x.id!==p.id).sort((a,b)=>Number(b.category===p.category)-Number(a.category===p.category)).slice(0,3);
  return options.length?cards(options):'<p class="muted">More thoughtful stories are on the way. Explore our latest articles in the meantime.</p>';
@@ -235,7 +277,7 @@ async function submitVerifiedComment(payload){
   return result.id;
 }
 
-async function article(sl){const p=published().find(p=>p.slug===sl);if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt,absoluteCover(p.cover_url),'article');articleSchema(p);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${paragraphs(p.body)}</div><div class="engage"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div><section class="related-reading" aria-labelledby="related-title"><div class="section-head"><div><div class="eyebrow">Discover more</div><h2 id="related-title">Continue reading</h2></div><a href="/articles">Browse all articles →</a></div>${relatedPosts(p)}</section></article>`);await loadEngagement(p)}
+async function article(sl){const p=published().find(p=>p.slug===sl);if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt,absoluteCover(p.cover_url),'article');articleSchema(p);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${richBody(p.body)}</div><div class="engage"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div><section class="related-reading" aria-labelledby="related-title"><div class="section-head"><div><div class="eyebrow">Discover more</div><h2 id="related-title">Continue reading</h2></div><a href="/articles">Browse all articles →</a></div>${relatedPosts(p)}</section></article>`);await loadEngagement(p)}
 function renderComments(items, helpfulCounts={}, articlePost=null){
   const count=items.length;
   $('#commentcount').textContent=`${count} ${count===1?'comment':'comments'}`;
@@ -639,8 +681,8 @@ function editorAdmin(){
     <label>Type<select class="field" name="kind"><option value="article" ${p.kind!=='guide'?'selected':''}>Article</option><option value="guide" ${p.kind==='guide'?'selected':''}>Gift guide</option></select></label>
     <label>Status<select class="field" name="status"><option value="draft" ${p.status!=='published'?'selected':''}>Draft</option><option value="published" ${p.status==='published'?'selected':''}>Published</option></select></label>
     <label class="full">Short description / excerpt<textarea class="field" name="excerpt" maxlength="400">${esc(p.excerpt||'')}</textarea></label>
-    <div class="full"><label for="postbody">Article body</label><p class="mini muted">Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.</p>
-      <div class="editor-toolbar" role="toolbar" aria-label="Article formatting">
+    <div class="full"><label for="postbody">Article body</label><p class="mini muted" id="body-help">Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.</p><div class="html-import-controls"><label for="html-import">Import HTML gift guide (.html)</label><input id="html-import" type="file" accept=".html,text/html"><p class="mini muted" id="html-import-status" role="status">Import keeps tables, lists, links and supported callouts. The page title is taken from the Title field, not the HTML file.</p></div>
+      <div class="editor-toolbar" id="markdown-toolbar" role="toolbar" aria-label="Article formatting">
         <button type="button" data-format="bold" title="Bold (Ctrl+B)"><b>B</b></button>
         <button type="button" data-format="italic" title="Italic (Ctrl+I)"><i>I</i></button>
         <button type="button" data-format="h2">H2</button><button type="button" data-format="h3">H3</button>
@@ -659,7 +701,30 @@ function editorAdmin(){
     <label>SEO description<input class="field" name="seo_description" value="${esc(p.seo_description||'')}"></label>
     </div><div class="actions"><button class="btn" type="submit">${p.id?'Save changes':'Create article'}</button><button type="button" class="btn ghost" id="cancel">Cancel</button></div><div id="saveinfo" role="status" aria-live="polite"></div></form></div>
     <dialog id="link-dialog" class="journal-modal"><form id="link-form"><h2>Insert a link</h2><p class="muted">Selected text becomes a clickable link in your article.</p><label>Text to display<input class="field" id="link-text" required maxlength="300"></label><label>Link URL<input class="field" id="link-url" type="url" placeholder="https://example.com" required></label><div class="link-dialog-actions"><button class="btn ghost" id="paste-link" type="button">⧉ Paste URL</button><button class="btn ghost" id="cancel-link" type="button">Cancel</button><button class="btn" type="submit">Insert link</button></div><p class="link-error" id="link-error" role="alert"></p></form></dialog>`;
-  const body=$('#postbody'),preview=$('#editor-preview');$('#open-media').onclick=()=>{state.view='media';drawAdmin()};
+  const body=$('#postbody'),preview=$('#editor-preview');
+   const updateBodyMode=()=>{
+     const html=body.value.startsWith(RICH_HTML_PREFIX);
+     $('#markdown-toolbar').hidden=html;
+     $('#body-help').textContent=html?'HTML guide mode: edit the cleaned HTML source below, or import another .html file. Use Preview to check tables and callouts.':'Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.';
+   };
+   $('#html-import').onchange=async e=>{
+     const file=e.currentTarget.files?.[0];
+     if(!file)return;
+     const feedback=$('#html-import-status');
+     if(!/\.html?$/i.test(file.name)||file.size>500000){feedback.textContent='Choose a .html file smaller than 500 KB.';e.currentTarget.value='';return}
+     if(body.value.trim()&&!confirm('Replace the current article body with this HTML file? Your other fields will not change.')){e.currentTarget.value='';return}
+     try{
+       const clean=sanitizeArticleHTML(await file.text());
+       if(!clean.trim())throw new Error('No readable article content was found.');
+       body.value=RICH_HTML_PREFIX+clean;
+       updateBodyMode();
+       feedback.textContent='HTML imported safely. Tables and callouts are preserved. Preview before saving.';
+       if(!preview.hidden)preview.innerHTML=richBody(body.value);
+     }catch(err){feedback.textContent='Could not import HTML: '+err.message}
+     e.currentTarget.value='';
+   };
+   updateBodyMode();
+   $('#open-media').onclick=()=>{state.view='media';drawAdmin()};
   const insertFormat=type=>{
     const a=body.selectionStart,b=body.selectionEnd,selected=body.value.slice(a,b);
     let replacement=selected||'your text';
@@ -672,7 +737,7 @@ function editorAdmin(){
       if(b<body.value.length&&body.value[b]!=='\n')replacement+='\n';
     }
     body.setRangeText(replacement,a,b,'select');body.focus();
-    if(!preview.hidden)preview.innerHTML=paragraphs(body.value);
+    if(!preview.hidden)preview.innerHTML=richBody(body.value);
   };
   const linkDialog=$('#link-dialog');let linkStart=0,linkEnd=0;
   $('#open-link-dialog').onclick=()=>{
@@ -686,17 +751,17 @@ function editorAdmin(){
     e.preventDefault();const label=$('#link-text').value.trim(),url=$('#link-url').value.trim();
     if(!label||!/^(https?:\/\/)[^\s<>\[\]()]+$/i.test(url)){$('#link-error').textContent='Enter text and a complete http:// or https:// link without spaces or parentheses.';return}
     const replacement=`[${label.replace(/[\[\]]/g,'')}](${url})`;
-    body.setRangeText(replacement,linkStart,linkEnd,'end');linkDialog.close();body.focus();if(!preview.hidden)preview.innerHTML=paragraphs(body.value);
+    body.setRangeText(replacement,linkStart,linkEnd,'end');linkDialog.close();body.focus();if(!preview.hidden)preview.innerHTML=richBody(body.value);
   };
   document.querySelectorAll('[data-format]').forEach(button=>button.onclick=()=>insertFormat(button.dataset.format));
-  const refreshPreview=()=>preview.innerHTML=paragraphs(body.value)||'<p class="muted">Start writing to see a preview.</p>';
+  const refreshPreview=()=>preview.innerHTML=richBody(body.value)||'<p class="muted">Start writing to see a preview.</p>';
   $('#toggle-preview').onclick=e=>{
     const showing=preview.hidden;preview.hidden=!showing;
     e.currentTarget.setAttribute('aria-pressed',String(showing));
     e.currentTarget.textContent=showing?'Hide preview':'Preview';
     if(showing)refreshPreview();
   };
-  body.oninput=()=>{if(!preview.hidden)refreshPreview()};
+  body.oninput=()=>{updateBodyMode();if(!preview.hidden)refreshPreview()};
   body.onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&['b','i'].includes(e.key.toLowerCase())){e.preventDefault();insertFormat(e.key.toLowerCase()==='b'?'bold':'italic')}};
   $('#cancel').onclick=()=>{state.view='posts';drawAdmin()};
   $('#postform').onsubmit=async e=>{
