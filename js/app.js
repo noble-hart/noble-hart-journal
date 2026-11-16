@@ -704,8 +704,8 @@ function editorAdmin(){
   const body=$('#postbody'),preview=$('#editor-preview');
    const updateBodyMode=()=>{
      const html=body.value.startsWith(RICH_HTML_PREFIX);
-     $('#markdown-toolbar').hidden=html;
-     $('#body-help').textContent=html?'HTML guide mode: edit the cleaned HTML source below, or import another .html file. Use Preview to check tables and callouts.':'Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.';
+     $('#markdown-toolbar').hidden=false;
+     $('#body-help').textContent=html?'HTML guide mode: select article text (not HTML tags), use the formatting buttons, and choose Preview to inspect tables and callouts. You can also import another .html file.':'Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.';
    };
    $('#html-import').onchange=async e=>{
      const file=e.currentTarget.files?.[0];
@@ -726,16 +726,29 @@ function editorAdmin(){
    updateBodyMode();
    $('#open-media').onclick=()=>{state.view='media';drawAdmin()};
   const insertFormat=type=>{
-    if(body.value.startsWith(RICH_HTML_PREFIX))return;
+    const html=body.value.startsWith(RICH_HTML_PREFIX);
     const a=body.selectionStart,b=body.selectionEnd,selected=body.value.slice(a,b);
     let replacement=selected||'your text';
-    if(type==='bold')replacement=`**${replacement}**`;
-    if(type==='italic')replacement=`*${replacement}*`;
-    if(['h2','h3','quote','bullets','numbered'].includes(type)){
-      const prefix={h2:'## ',h3:'### ',quote:'> ',bullets:'- ',numbered:'1. '}[type];
-      replacement=(selected||'Text').split('\n').map((line,i)=>type==='numbered'?`${i+1}. ${line}`:`${prefix}${line}`).join('\n');
-      if(a>0&&body.value[a-1]!=='\n')replacement='\n'+replacement;
-      if(b<body.value.length&&body.value[b]!=='\n')replacement+='\n';
+    if(html){
+      // Format selected text in HTML source, not with Markdown syntax.
+      const tags={bold:'strong',italic:'em',h2:'h2',h3:'h3',quote:'blockquote'};
+      if(tags[type]){
+        const tag=tags[type];
+        replacement=`<${tag}>${selected||'Text'}</${tag}>`;
+      }else if(type==='bullets'||type==='numbered'){
+        const list=type==='bullets'?'ul':'ol';
+        const items=(selected||'List item').split(/\r?\n/).filter(line=>line.trim()).map(line=>`<li>${line}</li>`).join('');
+        replacement=`<${list}>${items}</${list}>`;
+      }
+    }else{
+      if(type==='bold')replacement=`**${replacement}**`;
+      if(type==='italic')replacement=`*${replacement}*`;
+      if(['h2','h3','quote','bullets','numbered'].includes(type)){
+        const prefix={h2:'## ',h3:'### ',quote:'> ',bullets:'- ',numbered:'1. '}[type];
+        replacement=(selected||'Text').split('\n').map((line,i)=>type==='numbered'?`${i+1}. ${line}`:`${prefix}${line}`).join('\n');
+        if(a>0&&body.value[a-1]!=='\n')replacement='\n'+replacement;
+        if(b<body.value.length&&body.value[b]!=='\n')replacement+='\n';
+      }
     }
     body.setRangeText(replacement,a,b,'select');body.focus();
     if(!preview.hidden)preview.innerHTML=richBody(body.value);
@@ -751,7 +764,8 @@ function editorAdmin(){
   $('#link-form').onsubmit=e=>{
     e.preventDefault();const label=$('#link-text').value.trim(),url=$('#link-url').value.trim();
     if(!label||!/^(https?:\/\/)[^\s<>\[\]()]+$/i.test(url)){$('#link-error').textContent='Enter text and a complete http:// or https:// link without spaces or parentheses.';return}
-    const replacement=`[${label.replace(/[\[\]]/g,'')}](${url})`;
+    const html=body.value.startsWith(RICH_HTML_PREFIX);
+    const replacement=html?`<a href="${url.replaceAll('&','&amp;').replaceAll('"','&quot;')}">${esc(label)}</a>`:`[${label.replace(/[\[\]]/g,'')}](${url})`;
     body.setRangeText(replacement,linkStart,linkEnd,'end');linkDialog.close();body.focus();if(!preview.hidden)preview.innerHTML=richBody(body.value);
   };
   document.querySelectorAll('[data-format]').forEach(button=>button.onclick=()=>insertFormat(button.dataset.format));
@@ -763,7 +777,7 @@ function editorAdmin(){
     if(showing)refreshPreview();
   };
   body.oninput=()=>{updateBodyMode();if(!preview.hidden)refreshPreview()};
-  body.onkeydown=e=>{if(body.value.startsWith(RICH_HTML_PREFIX))return;if((e.ctrlKey||e.metaKey)&&['b','i'].includes(e.key.toLowerCase())){e.preventDefault();insertFormat(e.key.toLowerCase()==='b'?'bold':'italic')}};
+  body.onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&['b','i'].includes(e.key.toLowerCase())){e.preventDefault();insertFormat(e.key.toLowerCase()==='b'?'bold':'italic')}};
   $('#cancel').onclick=()=>{state.view='posts';drawAdmin()};
   $('#postform').onsubmit=async e=>{
     e.preventDefault();const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
