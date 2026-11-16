@@ -221,3 +221,16 @@ a.card:hover, a.card:focus-visible {
 .rich-guide li{margin:.5rem 0}
 .rich-guide blockquote{border-left:3px solid var(--nh-gold);padding:.7rem 1rem;background:var(--nh-cream)}
 @media(max-width:600px){.rich-guide{font-size:16px;padding:18px 14px}.rich-guide table{font-size:.88rem}.rich-guide h2{margin-top:1.8rem}}
+
+/* V16: Inline article and gift-guide images. Keep natural aspect ratios. */
+.article-body .journal-inline-figure,
+.editor-preview .journal-inline-figure,
+.rich-guide figure {margin:1.65rem 0;text-align:center;max-width:100%}
+.article-body .journal-inline-figure img,
+.editor-preview .journal-inline-figure img,
+.rich-guide img {display:block;width:auto;max-width:100%;height:auto;max-height:650px;object-fit:contain;margin:0 auto;border-radius:10px}
+.article-body .journal-inline-figure figcaption,
+.editor-preview .journal-inline-figure figcaption,
+.rich-guide figcaption {font-size:.85rem;color:#637068;line-height:1.5;padding:.65rem .4rem 0}
+#image-dialog .field{width:100%}
+#image-dialog label{display:block;margin:.75rem 0}
