@@ -460,14 +460,44 @@ async function initialize(){
   }
 }
 function render(){let path=route();if(path==='/')return home();if(path==='/articles')return listing();if(path==='/gift-guides')return listing(true);if(path.startsWith('/post/'))return article(path.slice(6));if(path==='/admin')return admin();if(['/about','/contact','/privacy','/disclosure'].includes(path))return simple(path.slice(1));frame('<div class="wrap section"><h1>Page not found</h1><a href="/">Back to home</a></div>')}
-async function admin(){meta('Admin');if(!db){frame(`<div class="login"><h2>Connect your database</h2>${live()}<p>Follow README.md to configure Supabase before logging in.</p></div>`);return}if(!state.session){frame(`<div class="login"><div class="eyebrow">Private publishing area</div><h2>Journal sign in</h2><p>Enter the email of your authorized admin account. We'll email a secure sign-in link.</p><form id="loginform"><input class="field" type="email" id="email" required placeholder="you@example.com"><div class="actions"><button class="btn">Email me a sign-in link</button></div></form><div id="loginmsg"></div></div>`);$('#loginform').onsubmit=async e=>{e.preventDefault();const email=$('#email').value.trim();const {error:err}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+'/admin'}});$('#loginmsg').innerHTML=err?error(err.message):status('Check your inbox for the sign-in link.')};return}if(!state.admin){frame(`<div class="login"><h2>Access not granted</h2><p>You are signed in, but your account has not been added to <code>admin_users</code>. Follow the admin activation instructions in README.md.</p><p class="mini">Signed in as ${esc(state.session.user.email)}</p><button class="btn ghost" id="logout">Sign out</button></div>`);$('#logout').onclick=signout;return}await loadAdmin();drawAdmin()}
+async function admin(){
+  meta('Admin');
+  if(!db){frame(`<div class="login"><h2>Connect your database</h2>${live()}<p>Follow README.md to configure Supabase before logging in.</p></div>`);return}
+  if(!state.session){
+    frame(`<div class="login"><div class="eyebrow">Private publishing area</div><h2>Journal sign in</h2><p>Sign in using your administrator email and password. If you have not set a password yet, use the existing magic-link option.</p>
+      <form id="password-login"><label>Email address<input class="field" type="email" id="email" required autocomplete="username" placeholder="you@example.com"></label><label>Password<input class="field" type="password" id="password" required autocomplete="current-password"></label><div class="actions"><button class="btn" type="submit">Sign in</button></div></form>
+      <hr><p class="mini muted">Don't have a password yet, or need a secure email sign-in link?</p><button class="btn ghost" type="button" id="magic-link">Email me a sign-in link</button><div id="loginmsg" role="status" aria-live="polite"></div></div>`);
+    const message=()=>$('#loginmsg');
+    $('#password-login').onsubmit=async e=>{
+      e.preventDefault();const btn=e.currentTarget.querySelector('[type="submit"]');btn.disabled=true;
+      const email=$('#email').value.trim(),password=$('#password').value;
+      const {data,error:err}=await db.auth.signInWithPassword({email,password});
+      if(err){message().innerHTML=error(err.message);btn.disabled=false;return}
+      state.session=data.session;
+      const {data:record,error:lookupError}=await db.from('admin_users').select('user_id').eq('user_id',data.user.id).maybeSingle();
+      if(lookupError||!record){await db.auth.signOut();state.session=null;state.admin=false;message().innerHTML=error('This account is not authorized to manage the Journal.');btn.disabled=false;return}
+      state.admin=true;state.view='overview';render();
+    };
+    $('#magic-link').onclick=async e=>{
+      const email=$('#email').value.trim();
+      if(!email||!$('#email').checkValidity()){$('#email').reportValidity();return}
+      e.currentTarget.disabled=true;
+      const {error:err}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+'/admin',shouldCreateUser:false}});
+      message().innerHTML=err?error(err.message):status('If this address is eligible, check its inbox for the sign-in link.');
+      e.currentTarget.disabled=false;
+    };
+    return;
+  }
+  if(!state.admin){frame(`<div class="login"><h2>Access not granted</h2><p>You are signed in, but your account has not been added to <code>admin_users</code>.</p><p class="mini">Signed in as ${esc(state.session.user.email)}</p><button class="btn ghost" id="logout">Sign out</button></div>`);$('#logout').onclick=signout;return}
+  await loadAdmin();drawAdmin();
+}
 async function loadAdmin(){const [a,b,c]=await Promise.all([db.from('posts').select('*').order('created_at',{ascending:false}),db.from('comments').select('*,posts(title)').order('created_at',{ascending:false}),db.from('likes').select('post_id')]);state.posts=a.data||[];state.comments=b.data||[];state.likes=c.data||[]}
-function drawAdmin(){const views=['overview','posts','editor','comments','likes','categories','media'];frame(`<div class="admin-shell"><aside class="sidebar">${views.map(v=>`<button data-view="${v}" class="${state.view===v?'selected':''}">${({overview:'◫ Overview',posts:'▤ Articles',editor:'✎ Write / Edit',comments:'☏ Comments',likes:'♡ Likes',categories:'▦ Categories',media:'▧ Media'})[v]}</button>`).join('')}<button id="logout">↪ Sign out</button></aside><div class="admin-main"><div class="eyebrow">Noble Hart / Admin</div><h1 style="font-size:2.1rem">${({overview:'Dashboard',posts:'Articles',editor:'Article editor',comments:'Comment moderation',likes:'Article likes',categories:'Categories',media:'Media library'})[state.view]}</h1><div id="adminbody"></div></div></div>`);document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;if(state.view==='editor')state.editing=null;drawAdmin()});$('#logout').onclick=signout;const el=$('#adminbody');if(state.view==='overview')el.innerHTML=`<div class="stats dashboard-stats">
+function drawAdmin(){const views=['overview','posts','editor','comments','likes','categories','media','account'];frame(`<div class="admin-shell"><aside class="sidebar">${views.map(v=>`<button data-view="${v}" class="${state.view===v?'selected':''}">${({overview:'◫ Overview',posts:'▤ Articles',editor:'✎ Write / Edit',comments:'☏ Comments',likes:'♡ Likes',categories:'▦ Categories',media:'▧ Media',account:'⚿ Account'})[v]}</button>`).join('')}<button id="logout">↪ Sign out</button></aside><div class="admin-main"><div class="eyebrow">Noble Hart / Admin</div><h1 style="font-size:2.1rem">${({overview:'Dashboard',posts:'Articles',editor:'Article editor',comments:'Comment moderation',likes:'Article likes',categories:'Categories',media:'Media library',account:'Account security'})[state.view]}</h1><div id="adminbody"></div></div></div>`);document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;if(state.view==='editor')state.editing=null;drawAdmin()});$('#logout').onclick=signout;const el=$('#adminbody');if(state.view==='overview')el.innerHTML=`<div class="stats dashboard-stats">
 <button class="stat stat-link" data-stat="published" aria-label="View published articles"><strong>${state.posts.filter(p=>p.status==='published').length}</strong>Published <span aria-hidden="true">↗</span></button>
 <button class="stat stat-link" data-stat="draft" aria-label="View drafts"><strong>${state.posts.filter(p=>p.status==='draft').length}</strong>Drafts <span aria-hidden="true">↗</span></button>
 <button class="stat stat-link" data-stat="pending" aria-label="View pending comments"><strong>${state.comments.filter(c=>c.status==='pending').length}</strong>Pending comments <span aria-hidden="true">↗</span></button>
 <button class="stat stat-link" data-stat="likes" aria-label="View likes per article"><strong>${state.likes.length}</strong>Likes <span aria-hidden="true">↗</span></button>
-</div><div class="panel"><h2>Welcome back</h2><p>Manage the Journal from one place. Draft an article, review comments or upload images.</p><button class="btn" id="newpost">Write an article →</button></div>`;if(state.view==='overview')$('#newpost').onclick=()=>{state.view='editor';state.editing=null;drawAdmin()};if(state.view==='overview')document.querySelectorAll('[data-stat]').forEach(b=>b.onclick=()=>{const v=b.dataset.stat;if(v==='published'||v==='draft'){state.postFilter=v;state.view='posts'}else if(v==='pending'){state.commentFilter='pending';state.view='comments'}else{state.view='likes'}drawAdmin()});if(state.view==='posts')postsAdmin();if(state.view==='editor')editorAdmin();if(state.view==='comments')commentsAdmin();if(state.view==='likes')likesAdmin();if(state.view==='categories')categoriesAdmin();if(state.view==='media')mediaAdmin()}
+</div><div class="panel"><h2>Welcome back</h2><p>Manage the Journal from one place. Draft an article, review comments or upload images.</p><button class="btn" id="newpost">Write an article →</button></div>`;if(state.view==='overview')$('#newpost').onclick=()=>{state.view='editor';state.editing=null;drawAdmin()};if(state.view==='overview')document.querySelectorAll('[data-stat]').forEach(b=>b.onclick=()=>{const v=b.dataset.stat;if(v==='published'||v==='draft'){state.postFilter=v;state.view='posts'}else if(v==='pending'){state.commentFilter='pending';state.view='comments'}else{state.view='likes'}drawAdmin()});if(state.view==='posts')postsAdmin();if(state.view==='editor')editorAdmin();if(state.view==='comments')commentsAdmin();if(state.view==='likes')likesAdmin();if(state.view==='categories')categoriesAdmin();if(state.view==='media')mediaAdmin();if(state.view==='account')accountAdmin()}
 function postsAdmin(){
  const filter=state.postFilter||'all';
  const rows=state.posts.filter(p=>filter==='all'||p.status===filter);
@@ -559,7 +589,7 @@ function commentsAdmin(){
  const filter=state.commentFilter||'all';
  const pending=state.comments.filter(c=>c.status==='pending');
  const visible=state.comments.filter(c=>filter==='all'||c.status===filter);
- $('#adminbody').innerHTML=`<div class="panel"><p class="muted">Flagged comments await your review. Low-risk comments can publish automatically.</p><label class="admin-filter-label" for="comment-status-filter">Show comments <select class="field" id="comment-status-filter"><option value="all" ${filter==='all'?'selected':''}>All comments</option><option value="pending" ${filter==='pending'?'selected':''}>Pending (${pending.length})</option><option value="approved" ${filter==='approved'?'selected':''}>Approved</option><option value="rejected" ${filter==='rejected'?'selected':''}>Rejected</option></select></label>${visible.length?visible.map(c=>`<div class="comment"><strong>${esc(c.name||'Reader')}</strong> <span class="muted">on ${esc(c.posts?.title||'Article')} · ${esc(c.status)}</span><p>${esc(c.body)}</p><div class="actions">${c.status!=='approved'?`<button class="btn small" data-status="approved" data-id="${c.id}">Approve</button>`:''}${c.status==='approved'&&!c.parent_id?`<button class="btn small ghost" data-admin-reply="${c.id}">Reply as author</button>`:''}${c.status!=='rejected'?`<button class="btn small ghost" data-status="rejected" data-id="${c.id}">Reject</button>`:''}<button class="btn small ghost" data-admin-edit="${c.id}">Edit</button><button class="btn small danger" data-status="delete" data-id="${c.id}">Delete</button></div></div>`).join(''):'<p>No comments match this filter.</p>'}</div>`;
+ $('#adminbody').innerHTML=`<div class="panel"><p class="muted">Flagged comments await your review. Low-risk comments can publish automatically.</p><label class="admin-filter-label" for="comment-status-filter">Show comments <select class="field" id="comment-status-filter"><option value="all" ${filter==='all'?'selected':''}>All comments</option><option value="pending" ${filter==='pending'?'selected':''}>Pending (${pending.length})</option><option value="approved" ${filter==='approved'?'selected':''}>Approved</option><option value="rejected" ${filter==='rejected'?'selected':''}>Rejected</option></select></label>${visible.length?visible.map(c=>`<div class="comment"><strong>${esc(c.name||'Reader')}</strong> <span class="muted">on ${esc(c.posts?.title||'Article')} · ${esc(c.status)}</span><p>${esc(c.body)}</p><div class="actions">${c.status!=='approved'?`<button class="btn small" data-status="approved" data-id="${c.id}">Approve</button>`:''}${c.status==='approved'&&!c.parent_id?`<button class="btn small ghost" data-admin-reply="${c.id}">Reply as author</button>`:''}${c.status!=='rejected'?`<button class="btn small ghost" data-status="rejected" data-id="${c.id}">Reject</button>`:''}${c.author_user_id&&c.author_user_id===state.session?.user?.id?`<button class="btn small ghost" data-admin-edit="${c.id}">Edit my comment</button>`:''}<button class="btn small danger" data-status="delete" data-id="${c.id}">Delete</button></div></div>`).join(''):'<p>No comments match this filter.</p>'}</div>`;
  $('#comment-status-filter').onchange=e=>{state.commentFilter=e.target.value;commentsAdmin()};
   document.querySelectorAll('[data-admin-reply]').forEach(button=>button.onclick=()=>{
     const c=state.comments.find(x=>String(x.id)===button.dataset.adminReply);
@@ -577,17 +607,33 @@ function commentsAdmin(){
     };
   });
  document.querySelectorAll('[data-admin-edit]').forEach(b=>b.onclick=()=>{
-   const c=state.comments.find(x=>String(x.id)===b.dataset.adminEdit);if(!c)return;
+   const c=state.comments.find(x=>String(x.id)===b.dataset.adminEdit);if(!c||!c.author_user_id||c.author_user_id!==state.session?.user?.id)return;
    const host=b.closest('.comment');if(host.querySelector('.admin-edit-form')){host.querySelector('.admin-edit-form').remove();return}
    const f=document.createElement('form');f.className='admin-edit-form';
    const ta=document.createElement('textarea');ta.className='field';ta.required=true;ta.minLength=3;ta.maxLength=1500;ta.value=c.body;ta.setAttribute('aria-label','Edit comment');f.appendChild(ta);
    const save=document.createElement('button');save.className='btn small';save.type='submit';save.textContent='Save edited comment';f.appendChild(save);
    const cancel=document.createElement('button');cancel.className='btn small ghost';cancel.type='button';cancel.textContent='Cancel';cancel.onclick=()=>f.remove();f.appendChild(cancel);
    const msg=document.createElement('p');msg.className='mini';f.appendChild(msg);host.appendChild(f);
-   f.onsubmit=async e=>{e.preventDefault();save.disabled=true;const {error:err}=await db.from('comments').update({body:ta.value.trim(),edited_at:new Date().toISOString()}).eq('id',c.id);
+   f.onsubmit=async e=>{e.preventDefault();save.disabled=true;const {error:err}=await db.from('comments').update({body:ta.value.trim(),edited_at:new Date().toISOString()}).eq('id',c.id).eq('author_user_id',state.session.user.id);
      if(err){msg.textContent=err.message;save.disabled=false;return}await loadAdmin();drawAdmin();};
  });
  document.querySelectorAll('[data-status]').forEach(b=>b.onclick=async()=>{const res=b.dataset.status==='delete'?await db.from('comments').delete().eq('id',b.dataset.id):await db.from('comments').update({status:b.dataset.status}).eq('id',b.dataset.id);if(res.error)alert(res.error.message);else{await loadAdmin();drawAdmin()}})
+}
+function accountAdmin(){
+  const area=$('#adminbody');
+  area.innerHTML=`<div class="panel"><h2>Administrator password</h2><p class="muted">Set a password on your existing Supabase administrator account. Your existing magic-link login remains available as a backup.</p><p class="mini">Signed in as ${esc(state.session?.user?.email||'')}</p>
+    <form id="account-password-form"><label>New password<input class="field" type="password" id="account-new-password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+    <label>Confirm new password<input class="field" type="password" id="account-password-confirm" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+    <div class="actions"><button class="btn" type="submit">Save password</button></div></form><div id="account-password-status" role="status" aria-live="polite"></div>
+    <p class="mini muted">Use a unique password of at least 12 characters. Supabase may ask you to sign in again if your session needs reauthentication. Never put passwords in the website source or GitHub.</p></div>`;
+  $('#account-password-form').onsubmit=async e=>{
+    e.preventDefault();const password=$('#account-new-password').value,confirm=$('#account-password-confirm').value;
+    if(password!==confirm){$('#account-password-status').innerHTML=error('Passwords do not match.');return}
+    const btn=e.currentTarget.querySelector('[type="submit"]');btn.disabled=true;
+    const {error:err}=await db.auth.updateUser({password});
+    $('#account-password-status').innerHTML=err?error(err.message):status('Password saved. You can use email and password next time you sign in.');
+    if(!err)e.currentTarget.reset();btn.disabled=false;
+  };
 }
 function likesAdmin(){
  const totals=new Map();for(const x of state.likes)totals.set(x.post_id,(totals.get(x.post_id)||0)+1);
