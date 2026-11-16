@@ -21,12 +21,12 @@
 
 ### Safety boundaries and limitations
 
-- No arbitrary JavaScript, iframes, embedded forms, image tags, inline CSS, event handlers or SVG are allowed in imported articles.
+- No arbitrary JavaScript, iframes, embedded forms, inline CSS, event handlers or SVG are allowed in imported articles. Standard HTTPS/HTTP image tags with safe attributes (src, alt, lazy loading) are now supported, and unsafe image URLs are stripped.
 - Standard links support absolute `https://`, `http://` and `mailto:` URLs only. External links get `rel="noopener noreferrer"`.
 - Imported body content is marked internally as rich HTML and sanitized again whenever displayed. Regular Markdown articles remain unchanged.
 - The text area becomes an HTML source editor for rich articles, not a WYSIWYG editor. Import the file again to replace the body; other fields remain unchanged.
 - HTML file must be under 500 KB. The app does not upload the HTML file itself: its cleaned content is stored in the article's existing Supabase `body` text field.
-- Featured images should still be added via the existing Media Library and cover image field.
+- Featured images should still be added via the existing Media Library and cover image field. You can also add images within the article using the **Image** button in the formatting toolbar; see Version 16 guidance.
 - The original `<style>` block is removed; supported gift-guide components use the Journal's own scoped stylesheet.
 - This change introduces no new SQL migrations, no new secrets and no changes to Supabase security policies, comments or existing article records.
 
