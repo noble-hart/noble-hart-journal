@@ -175,6 +175,53 @@ function resetCommentChallenge(form){
     try{window.turnstile.reset(form.dataset.turnstileWidget)}catch(err){console.warn('Turnstile reset:',err)}
   }
 }
+
+// Friendly browser-side countdown matching the existing 90-second database rule.
+// This is UX guidance only: the Supabase trigger and Worker remain authoritative.
+const COMMENT_COOLDOWN_MS = 90 * 1000;
+const COMMENT_COOLDOWN_KEY = 'nh-comment-last-success';
+const cooldownTimers = new WeakMap();
+function secondsUntilNextComment(){
+  const last = Number(localStorage.getItem(COMMENT_COOLDOWN_KEY)) || 0;
+  return Math.max(0, Math.ceil((last + COMMENT_COOLDOWN_MS - Date.now()) / 1000));
+}
+function cooldownMessage(seconds){
+  const minutes=Math.floor(seconds/60), remainder=seconds%60;
+  const clock=minutes+':'+String(remainder).padStart(2,'0');
+  return 'To prevent spam, you can post another comment in '+clock+'. Your message will stay here while you wait.';
+}
+function syncCommentCooldown(form){
+  if(!form || !form.isConnected)return;
+  const submit=form.querySelector('button[type="submit"]');
+  if(!submit)return;
+  let notice=form.querySelector('.comment-cooldown-notice');
+  if(!notice){
+    notice=document.createElement('p');
+    notice.className='comment-cooldown-notice mini';
+    notice.setAttribute('aria-live','off');
+    const actions=form.querySelector('.reply-actions')||form.querySelector('.full');
+    actions.parentNode.insertBefore(notice,actions);
+  }
+  const remain=secondsUntilNextComment();
+  notice.hidden=remain===0;
+  notice.textContent=remain?cooldownMessage(remain):'';
+  if(form.dataset.commentSubmitting!=='true')submit.disabled=remain>0;
+  if(remain===0){
+    const existing=cooldownTimers.get(form);
+    if(existing){clearInterval(existing);cooldownTimers.delete(form)}
+  }else if(!cooldownTimers.has(form)){
+    const timer=setInterval(()=>{
+      if(!form.isConnected){clearInterval(timer);cooldownTimers.delete(form);return}
+      syncCommentCooldown(form);
+    },1000);
+    cooldownTimers.set(form,timer);
+  }
+}
+function recordSuccessfulComment(){
+  localStorage.setItem(COMMENT_COOLDOWN_KEY,String(Date.now()));
+  document.querySelectorAll('#commentform,.reply-form').forEach(syncCommentCooldown);
+}
+
 async function submitVerifiedComment(payload){
   const response=await fetch('/api/comments',{
     method:'POST',credentials:'same-origin',
@@ -232,8 +279,11 @@ function renderComments(items, helpfulCounts={}, articlePost=null){
     area.innerHTML=`<form class="reply-form" data-parent="${b.dataset.reply}"><label>Your name (optional)<input class="field reply-name" maxlength="60" placeholder="Your name"></label><label>Your reply<textarea class="field reply-text" minlength="3" maxlength="1500" required placeholder="Write a thoughtful reply…"></textarea></label><div class="reply-actions"><button type="submit" class="btn small">Post reply</button><button type="button" class="btn small ghost reply-cancel">Cancel</button></div><div class="reply-status" role="status"></div></form>`;
     area.querySelector('.reply-cancel').onclick=()=>area.innerHTML='';
     mountTurnstile(area.querySelector('form'),'journal_reply');
+    syncCommentCooldown(area.querySelector('form'));
     area.querySelector('form').onsubmit=async e=>{
-      e.preventDefault();const form=e.currentTarget,btn=form.querySelector('[type=submit]');btn.disabled=true;
+      e.preventDefault();const form=e.currentTarget,btn=form.querySelector('[type=submit]');
+      if(secondsUntilNextComment()){syncCommentCooldown(form);return}
+      form.dataset.commentSubmitting='true';btn.disabled=true;
       let visitor=localStorage.getItem('nh-comment-visitor');
       if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
       const challenge=verifiedToken(form);
@@ -242,10 +292,11 @@ function renderComments(items, helpfulCounts={}, articlePost=null){
       try{
         const commentId=await submitVerifiedComment({post_id:articlePost.id,parent_id:form.dataset.parent,name:form.querySelector('.reply-name').value.trim()||'Reader',body:form.querySelector('.reply-text').value.trim(),visitor_id:visitor,edit_token:token,turnstile_token:challenge});
         localStorage.setItem('nh-edit-'+commentId,token);
+        recordSuccessfulComment();
         await refreshEngagement(articlePost);
         $('#commentstatus').innerHTML=status('Reply received. It will appear when approved if additional review is needed.');
       }catch(err){form.querySelector('.reply-status').textContent=err.message;btn.disabled=false}
-      finally{resetCommentChallenge(form)}
+      finally{delete form.dataset.commentSubmitting;resetCommentChallenge(form);syncCommentCooldown(form)}
     };
   });
   $('#comments').querySelectorAll('[data-helpful]').forEach(b=>b.onclick=async()=>{
@@ -274,6 +325,7 @@ async function loadEngagement(p){
   if(!db){$('#likes').textContent='0';renderComments([]);$('#like').disabled=true;$('#commentform').onsubmit=e=>{e.preventDefault();$('#commentstatus').innerHTML=error('Database not connected.')};return}
   await refreshEngagement(p);
   mountTurnstile($('#commentform'),'journal_comment');
+  syncCommentCooldown($('#commentform'));
   const storageKey='nh-like-'+p.id;
   $('#like').disabled=!!localStorage.getItem(storageKey);
   $('#like').onclick=async()=>{
@@ -288,17 +340,20 @@ async function loadEngagement(p){
     if(body.length<3)return;
     let visitor=localStorage.getItem('nh-comment-visitor');
     if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
-    const button=$('#commentform button');button.disabled=true;
+    const button=$('#commentform button');
+    if(secondsUntilNextComment()){syncCommentCooldown($('#commentform'));return}
+    $('#commentform').dataset.commentSubmitting='true';button.disabled=true;
     const challenge=verifiedToken($('#commentform'));
     if(!challenge){$('#commentstatus').innerHTML=error('Please complete the security check before posting.');button.disabled=false;return}
     const token=crypto.randomUUID();
     try{
       const commentId=await submitVerifiedComment({post_id:p.id,parent_id:null,name:name||'Reader',body,visitor_id:visitor,edit_token:token,turnstile_token:challenge});
       localStorage.setItem('nh-edit-'+commentId,token);
+      recordSuccessfulComment();
       $('#commentstatus').innerHTML=status('Thanks! Your comment was received. Comments that pass our checks appear automatically; others await review.');
       $('#commentform').reset();await refreshEngagement(p);
     }catch(err){console.warn('Comment submission:',err);$('#commentstatus').innerHTML=error(err.message)}
-    finally{resetCommentChallenge($('#commentform'));button.disabled=false}
+    finally{delete $('#commentform').dataset.commentSubmitting;resetCommentChallenge($('#commentform'));syncCommentCooldown($('#commentform'))}
   };
 }
 function contactFormHTML(){
