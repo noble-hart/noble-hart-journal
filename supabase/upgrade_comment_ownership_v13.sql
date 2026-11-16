@@ -32,12 +32,12 @@ CREATE TRIGGER journal_comment_assign_owner
 
 -- Admins can moderate anyone's STATUS, but must not rewrite another
 -- person's name or text. Authenticated authors may edit only their own text.
--- The legacy reader-edit RPC runs as its owner (postgres), after checking
--- the per-comment edit token, and therefore remains functional.
+-- The existing token-verified reader-edit RPC runs under its owner (postgres)
+-- and still works. Direct browser updates run as authenticated.
 CREATE OR REPLACE FUNCTION public.journal_guard_comment_updates()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path TO ''
 AS $fn$
 DECLARE
@@ -53,8 +53,8 @@ BEGIN
     RAISE EXCEPTION 'Comment identity and ownership cannot be changed';
   END IF;
 
-  -- SECURITY DEFINER reader edit-token RPC legitimately updates the body.
-  -- Ordinary authenticated admin API writes run under 'authenticated'.
+  -- The reader edit-token RPC performs its UPDATE as postgres.
+  -- Ordinary browser API writes run under the authenticated role.
   IF current_user <> 'postgres' THEN
     is_own_admin_comment := (
       OLD.author_user_id IS NOT NULL
