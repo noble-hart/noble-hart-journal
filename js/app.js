@@ -135,6 +135,59 @@ const relatedPosts=p=>{
  const options=published().filter(x=>x.id!==p.id).sort((a,b)=>Number(b.category===p.category)-Number(a.category===p.category)).slice(0,3);
  return options.length?cards(options):'<p class="muted">More thoughtful stories are on the way. Explore our latest articles in the meantime.</p>';
 };
+
+// Public Turnstile site key; server secret stays exclusively in Cloudflare Worker settings.
+const TURNSTILE_SITE_KEY = '0x4AAAAAAGEHuOUnfK_l1O4b';
+let turnstileScriptPromise = null;
+function loadTurnstile(){
+  if(window.turnstile)return Promise.resolve(window.turnstile);
+  if(!turnstileScriptPromise)turnstileScriptPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async=true;script.defer=true;
+    script.onload=()=>window.turnstile?resolve(window.turnstile):reject(new Error('Turnstile not available'));
+    script.onerror=()=>reject(new Error('Could not load Turnstile'));
+    document.head.appendChild(script);
+  });
+  return turnstileScriptPromise;
+}
+async function mountTurnstile(form,action){
+  const slot=document.createElement('div');slot.className='turnstile-slot';
+  const controls=form.querySelector('.reply-actions')||form.querySelector('.full');
+  controls.parentNode.insertBefore(slot,controls);
+  try{
+    const ts=await loadTurnstile();
+    if(!slot.isConnected)return;
+    const widgetId=ts.render(slot,{sitekey:TURNSTILE_SITE_KEY,action,theme:'auto'});
+    form.dataset.turnstileWidget=widgetId;
+  }catch(err){
+    const feedback=form.querySelector('.reply-status')||document.getElementById('commentstatus');
+    if(feedback)feedback.textContent='Security verification could not load. Refresh the page and try again.';
+    console.warn('Turnstile:',err);
+  }
+}
+function verifiedToken(form){
+  if(!form.dataset.turnstileWidget||!window.turnstile)return '';
+  return window.turnstile.getResponse(form.dataset.turnstileWidget)||'';
+}
+function resetCommentChallenge(form){
+  if(form.dataset.turnstileWidget&&window.turnstile){
+    try{window.turnstile.reset(form.dataset.turnstileWidget)}catch(err){console.warn('Turnstile reset:',err)}
+  }
+}
+async function submitVerifiedComment(payload){
+  const response=await fetch('/api/comments',{
+    method:'POST',credentials:'same-origin',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok||!result.id){
+    throw new Error(result.error||'Unable to submit comment. Please try again.');
+  }
+  return result.id;
+}
+
 async function article(sl){const p=published().find(p=>p.slug===sl);if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt,absoluteCover(p.cover_url),'article');articleSchema(p);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${paragraphs(p.body)}</div><div class="engage"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div><section class="related-reading" aria-labelledby="related-title"><div class="section-head"><div><div class="eyebrow">Discover more</div><h2 id="related-title">Continue reading</h2></div><a href="/articles">Browse all articles →</a></div>${relatedPosts(p)}</section></article>`);await loadEngagement(p)}
 function renderComments(items, helpfulCounts={}, articlePost=null){
   const count=items.length;
@@ -178,13 +231,21 @@ function renderComments(items, helpfulCounts={}, articlePost=null){
     document.querySelectorAll('.reply-container').forEach(el=>el.innerHTML='');
     area.innerHTML=`<form class="reply-form" data-parent="${b.dataset.reply}"><label>Your name (optional)<input class="field reply-name" maxlength="60" placeholder="Your name"></label><label>Your reply<textarea class="field reply-text" minlength="3" maxlength="1500" required placeholder="Write a thoughtful reply…"></textarea></label><div class="reply-actions"><button type="submit" class="btn small">Post reply</button><button type="button" class="btn small ghost reply-cancel">Cancel</button></div><div class="reply-status" role="status"></div></form>`;
     area.querySelector('.reply-cancel').onclick=()=>area.innerHTML='';
+    mountTurnstile(area.querySelector('form'),'journal_reply');
     area.querySelector('form').onsubmit=async e=>{
       e.preventDefault();const form=e.currentTarget,btn=form.querySelector('[type=submit]');btn.disabled=true;
       let visitor=localStorage.getItem('nh-comment-visitor');
       if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
-      const token=crypto.randomUUID();const {data:commentId,error:err}=await db.rpc('journal_submit_editable_comment',{p_post_id:articlePost.id,p_parent_id:form.dataset.parent,p_name:form.querySelector('.reply-name').value.trim()||'Reader',p_body:form.querySelector('.reply-text').value.trim(),p_visitor_id:visitor,p_edit_token:token});if(!err&&commentId)localStorage.setItem('nh-edit-'+commentId,token);
-      if(err){form.querySelector('.reply-status').textContent='Unable to submit reply. Please try again later.';btn.disabled=false}
-      else{await refreshEngagement(articlePost);$('#commentstatus').innerHTML=status('Reply received. It will appear when approved if additional review is needed.')}
+      const challenge=verifiedToken(form);
+      if(!challenge){form.querySelector('.reply-status').textContent='Please complete the security check before posting.';btn.disabled=false;return}
+      const token=crypto.randomUUID();
+      try{
+        const commentId=await submitVerifiedComment({post_id:articlePost.id,parent_id:form.dataset.parent,name:form.querySelector('.reply-name').value.trim()||'Reader',body:form.querySelector('.reply-text').value.trim(),visitor_id:visitor,edit_token:token,turnstile_token:challenge});
+        localStorage.setItem('nh-edit-'+commentId,token);
+        await refreshEngagement(articlePost);
+        $('#commentstatus').innerHTML=status('Reply received. It will appear when approved if additional review is needed.');
+      }catch(err){form.querySelector('.reply-status').textContent=err.message;btn.disabled=false}
+      finally{resetCommentChallenge(form)}
     };
   });
   $('#comments').querySelectorAll('[data-helpful]').forEach(b=>b.onclick=async()=>{
@@ -212,6 +273,7 @@ async function refreshEngagement(p){
 async function loadEngagement(p){
   if(!db){$('#likes').textContent='0';renderComments([]);$('#like').disabled=true;$('#commentform').onsubmit=e=>{e.preventDefault();$('#commentstatus').innerHTML=error('Database not connected.')};return}
   await refreshEngagement(p);
+  mountTurnstile($('#commentform'),'journal_comment');
   const storageKey='nh-like-'+p.id;
   $('#like').disabled=!!localStorage.getItem(storageKey);
   $('#like').onclick=async()=>{
@@ -227,10 +289,16 @@ async function loadEngagement(p){
     let visitor=localStorage.getItem('nh-comment-visitor');
     if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
     const button=$('#commentform button');button.disabled=true;
-    const token=crypto.randomUUID();const {data:commentId,error:err}=await db.rpc('journal_submit_editable_comment',{p_post_id:p.id,p_parent_id:null,p_name:name||'Reader',p_body:body,p_visitor_id:visitor,p_edit_token:token});if(!err&&commentId)localStorage.setItem('nh-edit-'+commentId,token);
-    if(err){console.warn('Comment submission:',err);$('#commentstatus').innerHTML=error('We could not accept your comment. Please try again later.')}
-    else{$('#commentstatus').innerHTML=status('Thanks! Your comment was received. Comments that pass our checks appear automatically; others await review.');$('#commentform').reset();await refreshEngagement(p)}
-    button.disabled=false;
+    const challenge=verifiedToken($('#commentform'));
+    if(!challenge){$('#commentstatus').innerHTML=error('Please complete the security check before posting.');button.disabled=false;return}
+    const token=crypto.randomUUID();
+    try{
+      const commentId=await submitVerifiedComment({post_id:p.id,parent_id:null,name:name||'Reader',body,visitor_id:visitor,edit_token:token,turnstile_token:challenge});
+      localStorage.setItem('nh-edit-'+commentId,token);
+      $('#commentstatus').innerHTML=status('Thanks! Your comment was received. Comments that pass our checks appear automatically; others await review.');
+      $('#commentform').reset();await refreshEngagement(p);
+    }catch(err){console.warn('Comment submission:',err);$('#commentstatus').innerHTML=error(err.message)}
+    finally{resetCommentChallenge($('#commentform'));button.disabled=false}
   };
 }
 function contactFormHTML(){

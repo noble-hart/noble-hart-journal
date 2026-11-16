@@ -181,3 +181,7 @@ a.card:hover, a.card:focus-visible {
   .site-header .nav a:hover::after,
   .site-header .nav a:focus-visible::after {transform:scaleX(1);}
 }
+
+/* V14: keep security verification aligned with comment form controls. */
+.turnstile-slot{margin:12px 0;min-height:65px;max-width:100%;overflow:hidden}
+.reply-form .turnstile-slot{margin:10px 0}
