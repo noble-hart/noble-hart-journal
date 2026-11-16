@@ -830,7 +830,7 @@ function editorAdmin(){
     }else{
       // Standalone Markdown image line; optional caption uses italic Markdown.
       const cleanAlt=alt.replace(/[\[\]]/g,'');
-      markup='\\n\\n!['+cleanAlt+']('+safe+')'+(caption?'\\n\\n*'+caption.replace(/[*\\n]/g,'')+'*':'')+'\\n\\n';
+      markup='\n\n!['+cleanAlt+']('+safe+')'+(caption?'\n\n*'+caption.replace(/[*\n]/g,'')+'*':'')+'\n\n';
     }
     body.setRangeText(markup,imageInsertStart,imageInsertEnd,'end');
     if(!preview.hidden)refreshPreview();
