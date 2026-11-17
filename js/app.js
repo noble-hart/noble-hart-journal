@@ -791,7 +791,7 @@ function editorAdmin(){
   const insertRich=(markup)=>{
     // Construct only sanitized markup before adding it to the visual surface.
     if(editorMode==='visual'){command('insertHTML',sanitizeArticleHTML(markup));return}
-    if(!isRich()){body.value=RICH_HTML_PREFIX+cleanedBody();body.setSelectionRange(body.value.length,body.value.length)}
+    if(!isRich()){const a=body.selectionStart,b=body.selectionEnd;body.value=RICH_HTML_PREFIX+sanitizeArticleHTML(paragraphs(body.value.slice(0,a))+markup+paragraphs(body.value.slice(b)));body.setSelectionRange(body.value.length,body.value.length);body.focus();return}
     const a=Math.max(RICH_HTML_PREFIX.length,body.selectionStart),b=Math.max(a,body.selectionEnd);
     body.setRangeText(markup,a,b,'end');body.focus();
   };
@@ -903,7 +903,7 @@ function editorAdmin(){
         imageDialog.close();body.focus();
       }
     }catch(err){imageError.textContent=err.message||'Could not insert image.'}
-    finally{submit.disabled=false;selectedFigure=null}
+    finally{submit.disabled=false;if(!imageDialog.open)selectedFigure=null}
   };
   const tableDialog=$('#table-dialog');
   $('#insert-table').onclick=()=>{rememberSelection();tableDialog.showModal()};
@@ -921,6 +921,7 @@ function editorAdmin(){
   $('#cancel').onclick=()=>{state.view='posts';drawAdmin()};
   $('#postform').onsubmit=async e=>{
     e.preventDefault();if(editorMode==='visual')syncVisual();if(!body.value.trim()||!cleanedBody().replace(/<[^>]*>/g,'').trim()&&!/<img\b/i.test(cleanedBody())){$('#saveinfo').innerHTML=error('Please add article content.');return}const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
+    if(isRich())obj.body=RICH_HTML_PREFIX+cleanedBody();
     obj.slug=slug(obj.slug||obj.title);if(!obj.slug)return;
     obj.published_at=obj.status==='published'?(p.published_at||new Date().toISOString()):null;
     const res=p.id?await db.from('posts').update(obj).eq('id',p.id):await db.from('posts').insert(obj);
@@ -1003,8 +1004,8 @@ async function mediaAdmin(){
  grid.querySelectorAll('[data-download]').forEach(b=>b.onclick=async()=>{b.disabled=true;const {data,error:err}=await db.storage.from('journal-images').download(b.dataset.download);if(err){info.textContent='Download failed: '+err.message}else{const url=URL.createObjectURL(data),a=document.createElement('a');a.href=url;a.download=b.dataset.download;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}b.disabled=false});
   grid.querySelectorAll('[data-delete-media]').forEach(b=>b.onclick=async()=>{
     const name=b.dataset.deleteMedia;const imgUrl=db.storage.from('journal-images').getPublicUrl(name).data.publicUrl;
-    const used=state.posts.filter(p=>p.cover_url===imgUrl);
-    if(used.length){info.textContent=`This image is used as a featured image in ${used.length} article(s). Replace those images before deleting it.`;return}
+    const used=state.posts.filter(p=>p.cover_url===imgUrl||String(p.body||'').includes(imgUrl));
+    if(used.length){info.textContent=`This image is used in ${used.length} article(s), either as a featured or inline image. Remove those references before deleting it.`;return}
     if(!confirm(`Permanently delete ${name} from your Media Library and cloud storage? This cannot be undone, and any external links to this image will stop working.`))return;
     b.disabled=true;const {error:err}=await db.storage.from('journal-images').remove([name]);
     if(err){info.textContent='Could not delete: '+err.message;b.disabled=false;return}
