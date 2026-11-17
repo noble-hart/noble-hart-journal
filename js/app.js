@@ -1,5 +1,5 @@
 import {INTEGRATIONS} from './integrations-config.js';
-import {importArticleFile,suggestPublishingFields} from './publishing-tools.js';
+import {importArticleFile,suggestPublishingFields,seoAlternatives} from './publishing-tools.js';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 // Supabase is loaded after the page renders, so a CDN/network failure cannot blank the blog.
 const configured = typeof SUPABASE_URL === 'string' && /^https:\/\/[^/]+\.supabase\.co\/?$/.test(SUPABASE_URL) && typeof SUPABASE_ANON_KEY === 'string' && SUPABASE_ANON_KEY.length > 20 && !SUPABASE_ANON_KEY.startsWith('PASTE_');
@@ -879,6 +879,8 @@ function editorAdmin(){
   const form=$('#postform'),titleField=form.elements.namedItem('title'),slugField=form.elements.namedItem('slug'),excerptField=form.elements.namedItem('excerpt'),seoTitleField=form.elements.namedItem('seo_title'),seoDescField=form.elements.namedItem('seo_description');
   const autoValues=new Map(),manualFields=new Set();
   let seoTimer=null,importing=false;
+  let chosenAlternative=false;
+  const nextCandidate=(values,current)=>{if(!values.length)return current;const index=values.indexOf(current);return values[(index+1)%values.length]};
   const readingHTML=()=>editorMode==='visual'&&visualDirty?sanitizeArticleHTML(visual.innerHTML):cleanedBody();
   const displaySEO=()=>{
     $('#seo-title-count').textContent=seoTitleField.value.length+' characters · aim for about 50–60';
@@ -896,7 +898,7 @@ function editorAdmin(){
     for(const [field,value] of values){
       if(!value)continue;
       const replaceable=!manualFields.has(field)&&(!field.value.trim()||field.value===autoValues.get(field));
-      if(force||replaceable){field.value=value;autoValues.set(field,value);manualFields.delete(field)}
+      if((force||replaceable)&&!(chosenAlternative&&(field===seoTitleField||field===seoDescField)&&field.value.trim())){field.value=value;autoValues.set(field,value);manualFields.delete(field)}
     }
     displaySEO();
   }
@@ -907,13 +909,21 @@ function editorAdmin(){
   titleField.addEventListener('input',()=>{displaySEO();scheduleSEO()});
   visual.addEventListener('input',scheduleSEO);body.addEventListener('input',scheduleSEO);
   $('#generate-seo').onclick=()=>{
-    if(!titleField.value.trim()&&!readingHTML().replace(/<[^>]*>/g,'').trim()){$('#seo-feedback').textContent='Add a title or article content first.';return}
-    if((seoTitleField.value.trim()||seoDescField.value.trim())&&!confirm('Regenerate SEO title and description from your current article? Your existing SEO text will be replaced.'))return;
-    const suggestions=suggestPublishingFields(titleField.value,excerptField.value,readingHTML());
-    for(const [field,value] of [[seoTitleField,suggestions.seoTitle],[seoDescField,suggestions.seoDescription]]){
+    const html=readingHTML();
+    if(!titleField.value.trim()&&!html.replace(/<[^>]*>/g,'').trim()){$('#seo-feedback').textContent='Add a title or article content first.';return}
+    const hasManual=[seoTitleField,seoDescField].some(field=>field.value.trim()&&(manualFields.has(field)||field.value!==autoValues.get(field)));
+    if(hasManual&&!confirm('Replace your existing SEO title and description with alternative suggestions?'))return;
+    const excerptSource=excerptField.value===autoValues.get(excerptField)?'':excerptField.value;
+    const {titles,descriptions}=seoAlternatives(titleField.value,excerptSource,html);
+    const previousTitle=seoTitleField.value,previousDescription=seoDescField.value;
+    for(const [field,values] of [[seoTitleField,titles],[seoDescField,descriptions]]){
+      const value=nextCandidate(values,field.value);
       if(value){field.value=value;autoValues.set(field,value);manualFields.delete(field)}
     }
-    suggestSEO();$('#seo-feedback').textContent='Suggestions created. Review them before publishing.';
+    chosenAlternative=true;
+    displaySEO();
+    const changed=previousTitle!==seoTitleField.value||previousDescription!==seoDescField.value;
+    $('#seo-feedback').textContent=changed?'Alternative suggestions generated. Click again to see another option, or edit the fields manually.':'No different suggestions are available from this content yet. Add more descriptive text or edit the fields manually.';
   };
   $('#html-import').onchange=async e=>{
     const input=e.currentTarget,file=input.files?.[0],feedback=$('#html-import-status');
@@ -933,7 +943,7 @@ function editorAdmin(){
       const check=new DOMParser().parseFromString(clean,'text/html');
       if(!check.body.textContent.trim()&&!check.body.querySelector('img'))throw Error('No readable article content was found.');
       if(!titleField.value.trim()&&result.title)titleField.value=result.title;
-      body.value=RICH_HTML_PREFIX+clean;visualDirty=false;
+      body.value=RICH_HTML_PREFIX+clean;visualDirty=false;chosenAlternative=false;
       setEditorMode('visual');suggestSEO();
       feedback.textContent='Imported into the visual editor. '+(result.warnings.length?result.warnings.join(' '):'Review your content and SEO before publishing.');
     }catch(err){feedback.textContent='Could not import: '+(err.message||'Unknown error')}
