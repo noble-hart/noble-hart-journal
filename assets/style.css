@@ -263,3 +263,35 @@ a.card:hover, a.card:focus-visible {
 /* V17.1: Rich article content shares the standard article canvas. */
 .rich-guide:not(.visual-article-editor){margin:0;width:100%;min-width:0}
 .visual-article-editor.rich-guide{font-size:1.09rem;line-height:1.85;color:var(--ink);background:#fff}
+
+
+/* V17.2: Keep the article editing controls within reach while the document scrolls.
+   The editor-only panel must not become an accidental sticky scroll ancestor. */
+.article-editor-panel{overflow:visible;min-width:0}
+.article-editor-panel .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.article-editor-panel .form-grid>.full{min-width:0}
+.editor-workspace{min-width:0;max-width:100%}
+.editor-sticky-controls{position:sticky;top:83px;z-index:15;background:#fff;padding:8px 0 0;box-shadow:0 5px 9px -7px rgba(23,54,93,.38)}
+.editor-sticky-controls .editor-mode-tabs{margin:0 0 7px;gap:5px}
+.editor-sticky-controls .editor-mode-tabs button{padding:7px 12px}
+.editor-sticky-controls .editor-toolbar{border-bottom:1px solid #d5dfe7;border-radius:10px 10px 0 0;padding:6px;gap:4px}
+.editor-sticky-controls .editor-toolbar button{min-height:36px;padding:4px 8px}
+.editor-sticky-controls .editor-toolbar[hidden]{display:none!important}
+.editor-workspace #visual-body,.editor-workspace #postbody,.editor-workspace #editor-preview{min-width:0;max-width:100%}
+.editor-workspace #visual-body{scroll-margin-top:210px}
+.editor-workspace #visual-body :is(p,h2,h3,h4,li,figure,td,th,blockquote){scroll-margin-top:205px}
+@media(max-width:800px){
+  .article-editor-panel .form-grid{grid-template-columns:minmax(0,1fr)}
+  .article-editor-panel .form-grid>.full{grid-column:1/-1}
+  .editor-sticky-controls{top:73px}
+  /* Horizontal scrolling keeps the complete toolbar accessible without
+     consuming the whole viewport on narrow screens. */
+  .editor-sticky-controls .editor-toolbar{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin}
+  .editor-sticky-controls .editor-toolbar button{flex:0 0 auto;white-space:nowrap;min-height:40px}
+  .editor-sticky-controls .editor-mode-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
+  .editor-sticky-controls .editor-mode-tabs button{flex:0 0 auto;white-space:nowrap;font-size:.8rem;padding:7px 9px}
+}
+@media(max-height:430px){
+  /* Avoid covering most of a short landscape viewport. */
+  .editor-sticky-controls{position:relative;top:auto}
+}
