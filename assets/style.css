@@ -283,7 +283,6 @@ a.card:hover, a.card:focus-visible {
 @media(max-width:800px){
   .article-editor-panel .form-grid{grid-template-columns:minmax(0,1fr)}
   .article-editor-panel .form-grid>.full{grid-column:1/-1}
-  .editor-sticky-controls{top:73px}
   /* Horizontal scrolling keeps the complete toolbar accessible without
      consuming the whole viewport on narrow screens. */
   .editor-sticky-controls .editor-toolbar{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin}
@@ -291,6 +290,7 @@ a.card:hover, a.card:focus-visible {
   .editor-sticky-controls .editor-mode-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
   .editor-sticky-controls .editor-mode-tabs button{flex:0 0 auto;white-space:nowrap;font-size:.8rem;padding:7px 9px}
 }
+@media(max-width:560px){.editor-sticky-controls{top:73px}}
 @media(max-height:430px){
   /* Avoid covering most of a short landscape viewport. */
   .editor-sticky-controls{position:relative;top:auto}
