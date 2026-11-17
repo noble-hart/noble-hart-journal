@@ -38,10 +38,16 @@ export async function safeRich(source) {
   return transformed.text();
 }
 function inline(text){
-  // Escape first. Links are reconstructed from validated URL values.
-  return esc(text).replace(/\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)"'<>]+)\)/g,(_,label,url)=>{
-    const safe=safeURL(url.replace(/&amp;/g,'&'));return safe?'<a href="'+esc(safe)+'">'+label+'</a>':label;
-  }).replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/\*([^*\n]+)\*/g,'<em>$1</em>').replace(/\x60([^\x60\n]+)\x60/g,'<code>$1</code>');
+  const format=value=>esc(value).replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/\*([^*\n]+)\*/g,'<em>$1</em>').replace(/\x60([^\x60\n]+)\x60/g,'<code>$1</code>');
+  const raw=String(text), pattern=/\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)"'<>]+)\)/g;
+  let out='',pos=0;
+  for(const m of raw.matchAll(pattern)){
+    out+=format(raw.slice(pos,m.index));
+    const url=safeURL(m[2]);
+    out+=url?'<a href="'+esc(url)+'">'+format(m[1])+'</a>':format(m[1]);
+    pos=m.index+m[0].length;
+  }
+  return out+format(raw.slice(pos));
 }
 export async function renderBody(body){
   const val=String(body||''),prefix='<!--NH_RICH_HTML_V1-->';
