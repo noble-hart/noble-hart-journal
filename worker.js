@@ -1,3 +1,4 @@
+import {serveSEO} from './seo-renderer.js';
 /**
  * Noble Hart Journal — dynamic sitemap endpoint.
  * Public article records are read with the Supabase ANON/PUBLISHABLE key.
@@ -226,6 +227,10 @@ export default {
           status: 503, headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store'}
         });
       }
+    }
+    const path=url.pathname.replace(/\/+$/,'')||'/';
+    if (request.method==='GET'||request.method==='HEAD') {
+      if (path==='/'||path==='/articles'||path==='/gift-guides'||path.startsWith('/post/')) return serveSEO(request,env,SITE_ORIGIN);
     }
     return env.ASSETS.fetch(request);
   }
