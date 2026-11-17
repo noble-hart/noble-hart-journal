@@ -234,3 +234,35 @@ a.card:hover, a.card:focus-visible {
 .rich-guide figcaption {font-size:.85rem;color:#637068;line-height:1.5;padding:.65rem .4rem 0}
 #image-dialog .field{width:100%}
 #image-dialog label{display:block;margin:.75rem 0}
+
+
+/* V17: Visual/source/preview modes and responsive inline image layout. */
+.editor-mode-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.editor-mode-tabs button{font:inherit;font-weight:650;font-size:.9rem;padding:9px 14px;border:1px solid #d9d9d4;border-radius:7px;background:#fff;color:#263b34;cursor:pointer}
+.editor-mode-tabs button[aria-pressed=true]{background:#174b3a;color:#fff;border-color:#174b3a}
+#visual-body[hidden],#postbody[hidden],#editor-preview[hidden]{display:none!important}
+.visual-article-editor{min-height:360px;padding:22px;border:1px solid #c9d0ca;border-radius:8px;overflow-wrap:anywhere;outline:none}
+.visual-article-editor:focus{border-color:#174b3a;box-shadow:0 0 0 2px #174b3a22}
+.visual-article-editor img{cursor:pointer}
+.visual-article-editor a{cursor:text}
+.visual-article-editor td,.visual-article-editor th{min-width:105px}
+.rich-guide,.article-body{display:flow-root}
+.rich-guide .journal-inline-figure{max-width:100%;margin:1.25rem auto}
+.rich-guide .journal-inline-figure img{width:100%;height:auto;max-height:650px;object-fit:contain}
+.rich-guide figure.nh-img-w25{width:25%}
+.rich-guide figure.nh-img-w40{width:40%}
+.rich-guide figure.nh-img-w50{width:50%}
+.rich-guide figure.nh-img-w75{width:75%}
+.rich-guide figure.nh-img-w100,.rich-guide figure.nh-img-full{width:100%}
+.rich-guide figure.nh-img-left{float:left;max-width:50%;margin:.3rem 1.4rem .9rem 0;clear:left}
+.rich-guide figure.nh-img-right{float:right;max-width:50%;margin:.3rem 0 .9rem 1.4rem;clear:right}
+.rich-guide figure.nh-img-center,.rich-guide figure.nh-img-full{float:none;clear:both;margin:1.5rem auto}
+.rich-guide h2,.rich-guide h3,.rich-guide .nh-table-wrap{clear:both}
+.rich-guide .nh-align-left{text-align:left}
+.rich-guide .nh-align-center{text-align:center}
+.rich-guide .nh-align-right{text-align:right}
+@media(max-width:700px){
+  .rich-guide figure.nh-img-left,.rich-guide figure.nh-img-right{float:none;clear:both;width:min(100%,480px);max-width:100%;margin:1.25rem auto}
+  .rich-guide figure.nh-img-w25,.rich-guide figure.nh-img-w40,.rich-guide figure.nh-img-w50,.rich-guide figure.nh-img-w75{max-width:100%}
+  .visual-article-editor{padding:14px}
+}
