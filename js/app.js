@@ -864,7 +864,7 @@ function editorAdmin(){
   const command=(name,value=null)=>{
     if(editorMode!=='visual')return;
     restoreSelection();document.execCommand('styleWithCSS',false,false);
-    document.execCommand(name,false,value);visualDirty=true;rememberSelection();
+    document.execCommand(name,false,value);visualDirty=true;rememberSelection();scheduleSEO();
   };
   const insertRich=(markup)=>{
     // Construct only sanitized markup before adding it to the visual surface.
@@ -889,7 +889,8 @@ function editorAdmin(){
   };
   function suggestSEO(force=false){
     const html=readingHTML();
-    const suggestions=suggestPublishingFields(titleField.value,excerptField.value,html);
+    const excerptSource=excerptField.value===autoValues.get(excerptField)?'':excerptField.value;
+    const suggestions=suggestPublishingFields(titleField.value,excerptSource,html);
     const values=[[seoTitleField,suggestions.seoTitle],[seoDescField,suggestions.seoDescription],[excerptField,suggestions.excerpt]];
     if(!p.id)values.push([slugField,slug(titleField.value)]);
     for(const [field,value] of values){
