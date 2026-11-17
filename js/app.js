@@ -712,7 +712,8 @@ Thank you for supporting The Noble Hart Journal.`]
 
 async function initialize(){
   // Show the public blog instantly. Never leave #app empty while waiting for third-party scripts.
-  render();
+  const edgeRendered=app.dataset.edgeRendered==='true';
+  if(!edgeRendered) render();
   if(!configured) return;
   try {
     const {createClient} = await import('https://esm.sh/@supabase/supabase-js@2.49.4');
@@ -730,7 +731,7 @@ async function initialize(){
   } catch(e){
     console.error('Journal connection failed:',e);
     connectionIssue='The Journal is available, but articles and sign-in could not connect to Supabase. Check your connection, API settings and browser console.';
-    render();
+    if(!edgeRendered) render();
   }
 }
 function render(){let path=route();if(path==='/')return home();if(path==='/articles')return listing();if(path==='/gift-guides')return listing(true);if(path.startsWith('/post/'))return article(path.slice(6));if(path==='/admin')return admin();if(['/about','/contact','/privacy','/disclosure'].includes(path))return simple(path.slice(1));frame('<div class="wrap section"><h1>Page not found</h1><a href="/">Back to home</a></div>')}
