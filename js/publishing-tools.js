@@ -24,6 +24,31 @@ export function suggestPublishingFields(title,excerpt,html){
     excerpt:cutWords(meaningful[0]||text,220)
   };
 }
+// Build distinct content-grounded alternatives, not random rewrites.
+export function seoAlternatives(title,excerpt,html){
+  const first=suggestPublishingFields(title,excerpt,html);
+  const doc=new DOMParser().parseFromString(String(html||''),'text/html');
+  const base=normalize(title);
+  const brand=' | Noble Hart';
+  const headings=[...doc.querySelectorAll('h2,h3')].map(x=>normalize(x.textContent)).filter(x=>x.length>=8&&x.length<=90&&!/^(faq|at a glance|conclusion|final thoughts?|introduction|references|sources|editorial transparency|frequently asked questions)$/i.test(x));
+  const paras=[...doc.querySelectorAll('p')].filter(x=>!x.matches('.nh-reference,.nh-eyebrow,.nh-kicker')&&!x.closest('figcaption,table')).map(x=>normalize(x.textContent)).filter(x=>x.length>=45);
+  const sentences=paras.flatMap(p=>p.match(/[^.!?]+(?:[.!?]+|$)/g)||[p]).map(normalize).filter(x=>x.length>=45);
+  const unique=values=>[...new Set(values.filter(Boolean))];
+  const titles=unique([
+    first.seoTitle,
+    cutWords(base,60),
+    base?cutWords(base,47).replace(/…$/,'')+brand:'',
+    ...headings.slice(0,5).map(h=>cutWords(base?base+' — '+h:h,60)),
+    ...headings.slice(0,5).map(h=>cutWords(h+(base?' — '+base:''),60))
+  ]);
+  const descriptions=unique([
+    first.seoDescription,
+    ...paras.slice(0,12).map(p=>cutWords(p,160)),
+    ...sentences.slice(0,12).map(p=>cutWords(p,160)),
+    ...paras.slice(1,8).map((p,i)=>cutWords(p+' '+(paras[i+2]||''),160))
+  ]);
+  return {titles,descriptions};
+}
 function loadMammoth(){
   if(window.mammoth?.convertToHtml)return Promise.resolve(window.mammoth);
   if(!mammothPromise)mammothPromise=new Promise((resolve,reject)=>{
