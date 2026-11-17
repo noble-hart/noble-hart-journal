@@ -712,7 +712,7 @@ function postsAdmin(){
 }
 function editorAdmin(){
   const p=state.editing||{},cats=[...new Set(state.posts.map(x=>x.category).filter(Boolean))];
-  $('#adminbody').innerHTML=`<div class="panel"><form id="postform"><div class="form-grid">
+  $('#adminbody').innerHTML=`<div class="panel article-editor-panel"><form id="postform"><div class="form-grid">
     <label class="full">Article title<input class="field" name="title" required maxlength="180" value="${esc(p.title||'')}"></label>
     <label>URL slug<input class="field" name="slug" placeholder="auto-generated-from-title" value="${esc(p.slug||'')}"></label>
     <label>Category<input class="field" name="category" list="cats" value="${esc(p.category||'')}"><datalist id="cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
@@ -720,7 +720,7 @@ function editorAdmin(){
     <label>Status<select class="field" name="status"><option value="draft" ${p.status!=='published'?'selected':''}>Draft</option><option value="published" ${p.status==='published'?'selected':''}>Published</option></select></label>
     <label class="full">Short description / excerpt<textarea class="field" name="excerpt" maxlength="400">${esc(p.excerpt||'')}</textarea></label>
     <div class="full"><label for="postbody">Article body</label><p class="mini muted" id="body-help">Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.</p><div class="html-import-controls"><label for="html-import">Import HTML gift guide (.html)</label><input id="html-import" type="file" accept=".html,text/html"><p class="mini muted" id="html-import-status" role="status">Import keeps tables, lists, links and supported callouts. The page title is taken from the Title field, not the HTML file.</p></div>
-      <div class="editor-mode-tabs" role="group" aria-label="Article editor mode">
+      <div class="editor-workspace"><div class="editor-sticky-controls"><div class="editor-mode-tabs" role="group" aria-label="Article editor mode">
         <button type="button" data-editor-mode="visual">Visual editor</button><button type="button" data-editor-mode="source">Source / Markdown</button><button type="button" data-editor-mode="preview">Preview</button>
       </div>
       <div class="editor-toolbar" id="markdown-toolbar" role="toolbar" aria-label="Article formatting">
@@ -738,9 +738,9 @@ function editorAdmin(){
         <button type="button" data-visual-command="undo">Undo</button><button type="button" data-visual-command="redo">Redo</button>
         <button type="button" id="toggle-preview" aria-pressed="false">Preview</button>
       </div>
-      <div id="visual-body" class="visual-article-editor article-body rich-guide" contenteditable="true" role="textbox" aria-label="Visual article editor" aria-multiline="true" hidden></div>
+      </div><div id="visual-body" class="visual-article-editor article-body rich-guide" contenteditable="true" role="textbox" aria-label="Visual article editor" aria-multiline="true" hidden></div>
       <textarea id="postbody" class="field editor-body" name="body">${esc(p.body||'')}</textarea>
-      <div class="editor-preview article-body" id="editor-preview" hidden></div>
+      <div class="editor-preview article-body" id="editor-preview" hidden></div></div>
     </div>
     <label class="full">Featured image URL<input class="field" name="cover_url" type="url" value="${esc(p.cover_url||'')}"><small class="muted">Use Media Library to copy a previous image URL. <button type="button" class="inline-media-link" id="open-media">Open Media Library</button></small></label>
     <label class="full">Image alternative text<input class="field" name="cover_alt" value="${esc(p.cover_alt||'')}"></label>
