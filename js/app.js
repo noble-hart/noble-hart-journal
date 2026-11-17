@@ -93,9 +93,8 @@ function wireNewsletterPopup(){
 
 const frame=(html)=>{app.innerHTML=header()+`<main id="main">${html}</main>`+footer();$('#menu')?.addEventListener('click',()=>{$('#nav').classList.toggle('open')});wireNewsletter()};
 const live=()=>connectionIssue?`<div class="notice">${esc(connectionIssue)}</div>`:configured?'':`<div class="notice">Preview mode: connect Supabase in <code>js/config.js</code> and run <code>supabase/schema.sql</code> to activate publishing, comments and likes.</div>`;
-const img=p=>p.cover_url?`<img src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}" loading="lazy">`:`<span class="placeholder">NH</span>`;
-const card=p=>`<a class="card" href="/post/${encodeURIComponent(p.slug)}"><div class="cover">${img(p)}</div><div class="card-body"><span class="pill">${esc(p.category||'Journal')}</span><h3>${esc(p.title)}</h3><p>${esc(p.excerpt||'')}</p><div class="meta" style="margin-top:16px">${date(p.published_at||p.created_at)} · Read article →</div></div></a>`;
-const published=()=>state.posts.filter(p=>p.status==='published');
+const img=p=>p.cover_url?`<img src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}" loading="lazy" decoding="async">`:`<span class="placeholder">NH</span>`;
+const card=p=>`<a class="card" href="/post/${encodeURIComponent(p.slug)}"><div class="cover">${img(p)}</div><div class="card-body"><div class="card-labels"><span class="pill">${esc(p.category||'Journal')}</span>${p.is_pinned?'<span class="pinned-label">Featured</span>':''}</div><h3>${esc(p.title)}</h3><p>${esc(p.excerpt||'')}</p><div class="meta" style="margin-top:16px">${date(p.published_at||p.created_at)} · Read article →</div></div></a>`;
 const cards=ps=>ps.length?`<div class="grid">${ps.map(card).join('')}</div>`:'<div class="empty">New stories are coming soon. Check back shortly.</div>';
 function giftTopics(){return `<div class="gift-topic-grid" aria-label="Explore gift guides by theme">
 <a class="gift-topic" href="#guides"><span aria-hidden="true">🎁</span><h2>By Recipient</h2><p>Thoughtful ideas for teens, parents, couples, friends and families.</p></a>
@@ -103,8 +102,79 @@ function giftTopics(){return `<div class="gift-topic-grid" aria-label="Explore g
 <a class="gift-topic" href="#guides"><span aria-hidden="true">✨</span><h2>By Interest</h2><p>Books, creativity, games, technology and everyday hobbies.</p></a>
 <a class="gift-topic" href="#guides"><span aria-hidden="true">❄️</span><h2>Seasonal Picks</h2><p>Christmas, festive moments and other seasonal celebrations.</p></a>
 </div>`}
-function home(){meta('Home','Thoughtful stories, family inspiration, useful guides and meaningful gift ideas from The Noble Hart Journal');const ps=published();const articles=ps.filter(p=>p.kind!=='guide');const guides=ps.filter(p=>p.kind==='guide');frame(`<section class="hero"><div class="wrap hero-grid"><div><div class="eyebrow">Welcome to the Journal</div><h1>Ideas worth sharing.<br>Stories worth reading.</h1><p>A thoughtful space for fresh perspectives, practical guides, family moments and everyday inspiration. Discover something worth taking with you.</p><a class="btn" href="/articles">Explore the Journal →</a></div><div class="hero-art" aria-hidden="true"><span>NH.</span></div></div></section><section class="section"><div class="wrap">${live()}<div class="section-head"><div><div class="eyebrow">From the Journal</div><h2>Latest stories</h2></div><a href="/articles">View all articles →</a></div>${cards(articles.slice(0,6))}</div></section><section class="section" style="background:var(--cream)"><div class="wrap"><div class="section-head"><div><div class="eyebrow">Thoughtful recommendations</div><h2>Gift guides and good ideas</h2></div><a href="/gift-guides">Explore gift guides →</a></div>${guides.length?cards(guides.slice(0,3)):'<p class="empty">Our gift guides are being prepared. Meanwhile, explore our thoughtful stories and family ideas.</p>'}</div></section>`)}
-function listing(guide=false){meta(guide?'Gift Guides':'Articles',guide?'Browse thoughtful gift guides by recipient, occasion, interest and season.':'Read thoughtful stories, perspectives and practical ideas from The Noble Hart Journal.');let ps=published().filter(p=>guide?p.kind==='guide':p.kind!=='guide');let cats=['All',...new Set(ps.map(p=>p.category).filter(Boolean))];if(state.category!=='All')ps=ps.filter(p=>p.category===state.category);if(state.query)ps=ps.filter(p=>(p.title+' '+p.excerpt+' '+p.category).toLowerCase().includes(state.query.toLowerCase()));const intro=guide?giftTopics():'';frame(`<div class="pagehead"><div class="wrap"><div class="eyebrow">The Noble Hart Journal</div><h1>${guide?'Thoughtful Gift Guides':'Explore the Journal'}</h1><p>${guide?'Find inspired gifts and considered recommendations for the people, moments and interests that matter.':'Stories, perspectives and practical ideas to return to.'}</p></div></div><section class="section"><div class="wrap">${intro}<div id="guides"><div class="section-head"><div><div class="eyebrow">${guide?'Published guides':'Our articles'}</div><h2>${guide?'Discover gift ideas':'Find your next read'}</h2></div></div><div class="searchrow"><input class="field" id="search" type="search" placeholder="Search ${guide?'gift guides':'stories'}…" value="${esc(state.query)}" aria-label="Search ${guide?'gift guides':'articles'}"><button class="btn" id="searchbtn">Search</button></div><div class="taglist" style="margin-bottom:26px">${cats.map(c=>`<button class="tag ${state.category===c?'on':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div><div id="results">${ps.length?cards(ps):`<div class="empty">${guide?'Our first gift guides are in preparation. Check back for thoughtfully researched recommendations.':'No stories match your search yet.'}</div>`}</div></div></div></section>`);$('#searchbtn').onclick=()=>{state.query=$('#search').value;listing(guide)};$('#search').onkeydown=e=>{if(e.key==='Enter'){$('#searchbtn').click()}};document.querySelectorAll('[data-cat]').forEach(el=>el.onclick=()=>{state.category=el.dataset.cat;listing(guide)})}
+async function home(){meta('Home','Thoughtful stories, family inspiration, useful guides and meaningful gift ideas from The Noble Hart Journal');const articles=[],guides=[];frame(`<section class="hero"><div class="wrap hero-grid"><div><div class="eyebrow">Welcome to the Journal</div><h1>Ideas worth sharing.<br>Stories worth reading.</h1><p>A thoughtful space for fresh perspectives, practical guides, family moments and everyday inspiration. Discover something worth taking with you.</p><a class="btn" href="/articles">Explore the Journal →</a></div><div class="hero-art" aria-hidden="true"><span>NH.</span></div></div></section><section class="section"><div class="wrap">${live()}<div class="section-head"><div><div class="eyebrow">From the Journal</div><h2>Latest stories</h2></div><a href="/articles">View all articles →</a></div><div id="home-stories">${db?'<p class="muted">Loading latest stories…</p>':cards(articles)}</div></div></section><section class="section" style="background:var(--cream)"><div class="wrap"><div class="section-head"><div><div class="eyebrow">Thoughtful recommendations</div><h2>Gift guides and good ideas</h2></div><a href="/gift-guides">Explore gift guides →</a></div><div id="home-guides">${db?'<p class="muted">Loading gift guides…</p>':'<p class="empty">Our gift guides are being prepared.</p>'}</div></div></section>`)
+ if(!db)return;
+ const stories=$('#home-stories'),giftGuides=$('#home-guides');
+ await Promise.all([
+  discover('article','',null,0,6).then(rows=>{if(stories?.isConnected)stories.innerHTML=cards(rows)}).catch(()=>{if(stories?.isConnected)stories.innerHTML=error('Stories could not load. Refresh to retry.')}),
+  discover('guide','',null,0,3).then(rows=>{if(giftGuides?.isConnected)giftGuides.innerHTML=cards(rows)}).catch(()=>{if(giftGuides?.isConnected)giftGuides.innerHTML=error('Gift guides could not load. Refresh to retry.')})
+ ]);
+}
+
+const DISCOVERY_PAGE_SIZE=12;
+async function discover(kind,query='',category=null,offset=0,limit=DISCOVERY_PAGE_SIZE){
+  const {data,error:err}=await db.rpc('journal_discover_posts',{p_kind:kind,p_query:query,p_category:category,p_offset:offset,p_limit:limit});
+  if(err)throw err;
+  return Array.isArray(data)?data:[];
+}
+function listing(guide=false){
+  meta(guide?'Gift Guides':'Articles',guide?'Browse thoughtful gift guides by recipient, occasion, interest and season.':'Read thoughtful stories, perspectives and practical ideas from The Noble Hart Journal.');
+  const kind=guide?'guide':'article',intro=guide?giftTopics():'';
+  frame('<div class="pagehead"><div class="wrap"><div class="eyebrow">The Noble Hart Journal</div><h1>'+(guide?'Thoughtful Gift Guides':'Explore the Journal')+'</h1><p>'+(guide?'Find inspired gifts and considered recommendations for the people, moments and interests that matter.':'Stories, perspectives and practical ideas to return to.')+'</p></div></div><section class="section"><div class="wrap">'+intro+'<div id="guides"><div class="section-head"><div><div class="eyebrow">'+(guide?'Published guides':'Our articles')+'</div><h2>'+(guide?'Discover gift ideas':'Find your next read')+'</h2></div></div></div><div class="searchrow"><input class="field" id="search" type="search" maxlength="120" autocomplete="off" placeholder="Search by topic, title or keyword…" aria-label="Search articles or gift guides"><button class="btn" id="searchbtn" type="button">Search</button></div><div class="taglist" id="discovery-categories" aria-label="Filter by category"></div><p id="discovery-status" class="mini muted" role="status" aria-live="polite"></p><div id="results"></div><div class="discovery-more"><button class="btn ghost" type="button" id="load-more-posts" hidden>Load more '+(guide?'gift guides':'articles')+'</button></div></div></section>');
+  if(!db){$('#results').innerHTML='<p class="muted">Connecting to the Journal…</p>';$('#search').disabled=true;$('#searchbtn').disabled=true;return}
+  const search=$('#search'),result=$('#results'),categoryBox=$('#discovery-categories'),statusEl=$('#discovery-status'),more=$('#load-more-posts');
+  let category=null,rows=[],offset=0,requestVersion=0,timer=null,busy=false,hasMore=false,categories=[];
+  function drawCategories(){
+    categoryBox.replaceChildren();
+    for(const label of [null,...categories]){
+      const b=document.createElement('button');b.type='button';b.className='tag'+(category===label?' on':'');b.textContent=label??'All';b.setAttribute('aria-pressed',String(category===label));
+      b.onclick=()=>{if(category!==label){category=label;drawCategories();schedule(true)}};categoryBox.appendChild(b);
+    }
+  }
+  drawCategories();
+  db.rpc('journal_discovery_categories',{p_kind:kind}).then(({data,error:err})=>{
+    if(!categoryBox.isConnected||err)return;
+    categories=(data||[]).map(x=>x.category).filter(Boolean);drawCategories();
+  });
+  function schedule(immediate=false){
+    clearTimeout(timer);const version=++requestVersion;
+    busy=true;hasMore=false;more.hidden=true;more.disabled=true;
+    statusEl.textContent='Searching…';result.setAttribute('aria-busy','true');
+    const query=search.value.trim();
+    if(immediate)run(false,version,query,category);
+    else timer=setTimeout(()=>run(false,version,query,category),280);
+  }
+  async function run(append,version,query,selectedCategory){
+    const requestedOffset=append?offset:0;
+    try{
+      const batch=await discover(kind,query,selectedCategory,requestedOffset,DISCOVERY_PAGE_SIZE+1);
+      if(version!==requestVersion||!result.isConnected)return;
+      const page=batch.slice(0,DISCOVERY_PAGE_SIZE);
+      hasMore=batch.length>DISCOVERY_PAGE_SIZE;
+      if(!append){rows=[];offset=0;result.innerHTML='<div class="grid"></div>'}
+      const grid=result.querySelector('.grid');
+      const seen=new Set(rows.map(x=>x.id));
+      const unique=page.filter(x=>!seen.has(x.id));rows.push(...unique);offset=requestedOffset+page.length;
+      if(unique.length)grid?.insertAdjacentHTML('beforeend',unique.map(card).join(''));
+      if(!rows.length)result.innerHTML='<div class="empty">'+(query?'No matching '+(guide?'gift guides':'articles')+'. Try a shorter keyword or a different category.':'No published items match this category yet.')+'</div>';
+      statusEl.textContent=rows.length?'Showing '+rows.length+' result'+(rows.length===1?'':'s'):'No results';
+      more.hidden=!hasMore;
+    }catch(err){
+      if(version!==requestVersion||!result.isConnected)return;
+      if(!append){result.innerHTML=error('Could not load results. Try searching again.');hasMore=false}
+      statusEl.textContent=append?'Could not load more. Please retry.':'Search temporarily unavailable.';
+      more.hidden=!append;
+    }finally{
+      if(version===requestVersion&&result.isConnected){busy=false;more.disabled=false;result.setAttribute('aria-busy','false')}
+    }
+  }
+  search.addEventListener('input',e=>{if(!e.isComposing)schedule()});
+  search.addEventListener('compositionend',()=>schedule());
+  search.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();schedule(true)}});
+  $('#searchbtn').onclick=()=>schedule(true);
+  more.onclick=()=>{if(busy||!hasMore)return;busy=true;more.disabled=true;statusEl.textContent='Loading more…';run(true,requestVersion,search.value.trim(),category)};
+  schedule(true);
+}
 // Minimal Markdown formatting. Escape source HTML before adding supported markup.
 const inlineMarkdown = value => {
   let t=esc(value);
@@ -211,10 +281,15 @@ function richBody(body){
   return value.startsWith(RICH_HTML_PREFIX)?'<div class="rich-guide">'+sanitizeArticleHTML(value.slice(RICH_HTML_PREFIX.length))+'</div>':paragraphs(value);
 }
 
-const relatedPosts=p=>{
- const options=published().filter(x=>x.id!==p.id).sort((a,b)=>Number(b.category===p.category)-Number(a.category===p.category)).slice(0,3);
- return options.length?cards(options):'<p class="muted">More thoughtful stories are on the way. Explore our latest articles in the meantime.</p>';
-};
+async function loadRelatedPosts(p){
+ const host=$('#related-post-results');if(!host)return;
+ try{
+   const preferred=await discover(p.kind,'',p.category,0,4);
+   let options=preferred.filter(x=>x.id!==p.id).slice(0,3);
+   if(options.length<3){const fallback=await discover(p.kind,'',null,0,7),seen=new Set([p.id,...options.map(x=>x.id)]);options=options.concat(fallback.filter(x=>!seen.has(x.id))).slice(0,3)}
+   if(host.isConnected)host.innerHTML=options.length?cards(options):'<p class="muted">More thoughtful stories are on the way.</p>';
+ }catch{if(host.isConnected)host.innerHTML='<p class="muted">Explore more articles and gift guides from the menu.</p>'}
+}
 
 // Public Turnstile site key; server secret stays exclusively in Cloudflare Worker settings.
 const TURNSTILE_SITE_KEY = '0x4AAAAAAGEHuOUnfK_l1O4b';
@@ -315,7 +390,7 @@ async function submitVerifiedComment(payload){
   return result.id;
 }
 
-async function article(sl){const p=published().find(p=>p.slug===sl);if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt,absoluteCover(p.cover_url),'article');articleSchema(p);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${richBody(p.body)}</div><div class="engage"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div><section class="related-reading" aria-labelledby="related-title"><div class="section-head"><div><div class="eyebrow">Discover more</div><h2 id="related-title">Continue reading</h2></div><a href="/articles">Browse all articles →</a></div>${relatedPosts(p)}</section></article>`);await loadEngagement(p)}
+async function article(sl){if(!db){frame('<div class="wrap section"><p class="muted">Loading article…</p></div>');return}const {data:p,error:postError}=await db.from('posts').select('id,title,slug,category,kind,status,excerpt,body,cover_url,cover_alt,seo_title,seo_description,published_at,created_at,updated_at').eq('status','published').eq('slug',sl).maybeSingle();if(postError){frame('<div class="wrap section"><h1>Unable to load story</h1><p>Please refresh to try again.</p></div>');return}if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt,absoluteCover(p.cover_url),'article');articleSchema(p);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${richBody(p.body)}</div><div class="engage"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div><section class="related-reading" aria-labelledby="related-title"><div class="section-head"><div><div class="eyebrow">Discover more</div><h2 id="related-title">Continue reading</h2></div><a href="/articles">Browse all articles →</a></div><div id="related-post-results"><p class="muted">Loading related stories…</p></div></section></article>`);await Promise.all([loadEngagement(p),loadRelatedPosts(p)])}
 function renderComments(items, helpfulCounts={}, articlePost=null){
   const count=items.length;
   $('#commentcount').textContent=`${count} ${count===1?'comment':'comments'}`;
@@ -641,13 +716,8 @@ async function initialize(){
   try {
     const {createClient} = await import('https://esm.sh/@supabase/supabase-js@2.49.4');
     db=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{detectSessionInUrl:true}});
-    // Fetch posts and the current session independently, so failed auth does not hide articles.
-    const [{data:posts,error:postError},{data:authData,error:authError}] = await Promise.all([
-      db.from('posts').select('*').eq('status','published').order('published_at',{ascending:false}),
-      db.auth.getSession()
-    ]);
-    if(postError) throw postError;
-    state.posts=posts||[];
+    // Public routes fetch only required records; do not preload every article body.
+    const {data:authData,error:authError}=await db.auth.getSession();
     if(authError) console.warn('Supabase auth:',authError);
     state.session=authData?.session||null;
     if(state.session){
@@ -655,7 +725,7 @@ async function initialize(){
       if(adminError) console.warn('Admin lookup:',adminError);
       state.admin=!!admin;
     }
-    render();wireNewsletterPopup();
+    await render();wireNewsletterPopup();
   } catch(e){
     console.error('Journal connection failed:',e);
     connectionIssue='The Journal is available, but articles and sign-in could not connect to Supabase. Check your connection, API settings and browser console.';
@@ -694,7 +764,7 @@ async function admin(){
   if(!state.admin){frame(`<div class="login"><h2>Access not granted</h2><p>You are signed in, but your account has not been added to <code>admin_users</code>.</p><p class="mini">Signed in as ${esc(state.session.user.email)}</p><button class="btn ghost" id="logout">Sign out</button></div>`);$('#logout').onclick=signout;return}
   await loadAdmin();drawAdmin();
 }
-async function loadAdmin(){const [a,b,c]=await Promise.all([db.from('posts').select('*').order('created_at',{ascending:false}),db.from('comments').select('*,posts(title)').order('created_at',{ascending:false}),db.from('likes').select('post_id')]);state.posts=a.data||[];state.comments=b.data||[];state.likes=c.data||[]}
+async function loadAdmin(){const [a,b,c]=await Promise.all([db.from('posts').select('id,title,slug,category,kind,status,excerpt,body,cover_url,cover_alt,seo_title,seo_description,created_at,updated_at,published_at,is_pinned').order('created_at',{ascending:false}),db.from('comments').select('*,posts(title)').order('created_at',{ascending:false}),db.from('likes').select('post_id')]);state.posts=a.data||[];state.comments=b.data||[];state.likes=c.data||[]}
 function drawAdmin(){const views=['overview','posts','editor','comments','likes','categories','media','account'];frame(`<div class="admin-shell"><aside class="sidebar">${views.map(v=>`<button data-view="${v}" class="${state.view===v?'selected':''}">${({overview:'◫ Overview',posts:'▤ Articles',editor:'✎ Write / Edit',comments:'☏ Comments',likes:'♡ Likes',categories:'▦ Categories',media:'▧ Media',account:'⚿ Account'})[v]}</button>`).join('')}<button id="logout">↪ Sign out</button></aside><div class="admin-main"><div class="eyebrow">Noble Hart / Admin</div><h1 style="font-size:2.1rem">${({overview:'Dashboard',posts:'Articles',editor:'Article editor',comments:'Comment moderation',likes:'Article likes',categories:'Categories',media:'Media library',account:'Account security'})[state.view]}</h1><div id="adminbody"></div></div></div>`);document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;if(state.view==='editor')state.editing=null;drawAdmin()});$('#logout').onclick=signout;const el=$('#adminbody');if(state.view==='overview')el.innerHTML=`<div class="stats dashboard-stats">
 <button class="stat stat-link" data-stat="published" aria-label="View published articles"><strong>${state.posts.filter(p=>p.status==='published').length}</strong>Published <span aria-hidden="true">↗</span></button>
 <button class="stat stat-link" data-stat="draft" aria-label="View drafts"><strong>${state.posts.filter(p=>p.status==='draft').length}</strong>Drafts <span aria-hidden="true">↗</span></button>
@@ -704,10 +774,11 @@ function drawAdmin(){const views=['overview','posts','editor','comments','likes'
 function postsAdmin(){
  const filter=state.postFilter||'all';
  const rows=state.posts.filter(p=>filter==='all'||p.status===filter);
- $('#adminbody').innerHTML=`<div class="admin-filterbar"><button class="btn" id="newpost">+ New article</button><label for="post-status-filter">Show <select class="field" id="post-status-filter"><option value="all" ${filter==='all'?'selected':''}>All articles</option><option value="published" ${filter==='published'?'selected':''}>Published</option><option value="draft" ${filter==='draft'?'selected':''}>Drafts</option></select></label></div><div class="panel"><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Type</th><th>Updated</th><th>Actions</th></tr></thead><tbody>${rows.map(p=>`<tr><td>${esc(p.title)}</td><td>${esc(p.status)}</td><td>${esc(p.kind)}</td><td>${date(p.updated_at)}</td><td><button class="btn small ghost" data-edit="${p.id}">Edit</button> <button class="btn small danger" data-delete="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="5">No articles in this filter.</td></tr>'}</tbody></table></div>`;
+ $('#adminbody').innerHTML=`<div class="admin-filterbar"><button class="btn" id="newpost">+ New article</button><label for="post-status-filter">Show <select class="field" id="post-status-filter"><option value="all" ${filter==='all'?'selected':''}>All articles</option><option value="published" ${filter==='published'?'selected':''}>Published</option><option value="draft" ${filter==='draft'?'selected':''}>Drafts</option></select></label></div><div class="panel"><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Type</th><th>Updated</th><th>Actions</th></tr></thead><tbody>${rows.map(p=>`<tr><td>${esc(p.title)}${p.is_pinned?'<small class="admin-pin-label"> · Featured</small>':''}</td><td>${esc(p.status)}</td><td>${esc(p.kind)}</td><td>${date(p.updated_at)}</td><td><button class="btn small ghost" data-edit="${p.id}">Edit</button> ${p.status==='published'?`<button class="btn small ghost" data-pin="${p.id}" aria-pressed="${!!p.is_pinned}">${p.is_pinned?'Unpin':'Pin'}</button>`:''} <button class="btn small danger" data-delete="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="5">No articles in this filter.</td></tr>'}</tbody></table></div>`;
  $('#post-status-filter').onchange=e=>{state.postFilter=e.target.value;postsAdmin()};
  $('#newpost').onclick=()=>{state.editing=null;state.view='editor';drawAdmin()};
  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{state.editing=state.posts.find(p=>p.id===b.dataset.edit);state.view='editor';drawAdmin()});
+ document.querySelectorAll('[data-pin]').forEach(b=>b.onclick=async()=>{const post=state.posts.find(p=>p.id===b.dataset.pin);if(!post)return;b.disabled=true;const {error:err}=await db.from('posts').update({is_pinned:!post.is_pinned}).eq('id',post.id);if(err){alert('Could not update pinned status: '+err.message);b.disabled=false;return}await loadAdmin();drawAdmin()});
  document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Permanently delete this article and its comments/likes?'))return;const {error:err}=await db.from('posts').delete().eq('id',b.dataset.delete);if(err)alert(err.message);else{await loadAdmin();drawAdmin()}});
 }
 function editorAdmin(){

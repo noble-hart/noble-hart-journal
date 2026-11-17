@@ -295,3 +295,17 @@ a.card:hover, a.card:focus-visible {
   /* Avoid covering most of a short landscape viewport. */
   .editor-sticky-controls{position:relative;top:auto}
 }
+
+
+/* V18: responsive discovery cards and compact live-search controls. */
+.card-labels{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pinned-label{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#f7edcf;color:#755c22;font-size:.72rem;font-weight:750}
+.admin-pin-label{color:#526b61;font-weight:750}
+#discovery-categories{margin:12px 0 18px;display:flex;flex-wrap:wrap;gap:8px}
+#discovery-status{min-height:1.5em;margin:6px 0 18px}
+.discovery-more{display:flex;justify-content:center;margin-top:26px}
+.discovery-more button[hidden]{display:none!important}
+#results[aria-busy=true]{opacity:.72}
+#results .grid,.grid{min-width:0}
+.card .cover img{max-width:100%;width:100%;object-fit:cover}
+@media(max-width:560px){.discovery-more .btn{width:100%;max-width:340px}}
