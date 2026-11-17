@@ -23,8 +23,26 @@ as $$
  ), tokens as (
    select distinct word from terms cross join lateral regexp_split_to_table(phrase,'[^[:alnum:]]+') as word
    where length(word)>0
+ ), synonyms(term,related) as (
+   values
+   ('spouse','wife'),('spouse','husband'),('spouse','partner'),
+   ('wife','spouse'),('wife','partner'),('husband','spouse'),('husband','partner'),
+   ('partner','spouse'),('partner','wife'),('partner','husband'),
+   ('kid','child'),('kids','children'),('kids','child'),('children','kids'),('child','kid'),
+   ('teen','teenager'),('teens','teenager'),('teenager','teen'),('teenagers','teen'),
+   ('gift','present'),('gifts','present'),('present','gift'),('presents','gift'),
+   ('christmas','festive'),('christmas','holiday'),('festive','christmas'),('holiday','christmas'),
+   ('birthday','celebration'),('celebration','birthday'),
+   ('icebreaker','conversation'),('icebreakers','conversation'),('conversation','icebreaker'),
+   ('game','activity'),('games','activities')
+ ), expanded as (
+   select word from tokens
+   union
+   select s.related from synonyms s join tokens t on t.word=s.term
  ), q as (
-   select phrase, (select to_tsquery('english'::regconfig,string_agg(quote_literal(word)||':*',' | ')) from tokens) as query
+   select phrase,
+     (select to_tsquery('english'::regconfig,string_agg(quote_literal(word)||':*',' | ')) from tokens) as exact_query,
+     (select to_tsquery('english'::regconfig,string_agg(quote_literal(word)||':*',' | ')) from expanded) as query
    from terms
  )
  select p.id,p.title,p.slug,p.category,p.kind,p.excerpt,p.cover_url,p.cover_alt,p.published_at,p.created_at,p.is_pinned
@@ -37,7 +55,8 @@ as $$
  case when q.phrase='' then p.is_pinned else false end desc,
  case when q.phrase<>'' then
    (case when strpos(lower(p.title),q.phrase)>0 then 8 else 0 end)
-   + coalesce(ts_rank_cd(p.discovery_search,q.query),0)*4
+   + coalesce(ts_rank_cd(p.discovery_search,q.exact_query),0)*12
+   + coalesce(ts_rank_cd(p.discovery_search,q.query),0)*2
    + (select count(*) from tokens where strpos(lower(p.title||' '||p.category||' '||coalesce(p.excerpt,'')),word)>0)
  else 0 end desc,
  p.published_at desc nulls last,p.id
