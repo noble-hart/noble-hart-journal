@@ -309,3 +309,15 @@ a.card:hover, a.card:focus-visible {
 #results .grid,.grid{min-width:0}
 .card .cover img{max-width:100%;width:100%;object-fit:cover}
 @media(max-width:560px){.discovery-more .btn{width:100%;max-width:340px}}
+
+/* V19: publishing assistant */
+.publishing-seo{padding:18px;border:1px solid var(--line);border-radius:12px;background:#fbfcfd;min-width:0}
+.seo-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:14px}
+.seo-heading h2{font-size:1.25rem;margin:0 0 5px}
+.seo-heading p{margin:0}
+.publishing-seo label{margin:12px 0}
+.seo-result-preview{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;overflow-wrap:anywhere}
+#seo-preview-url{font-size:.8rem;color:#296b51;margin-top:8px}
+#seo-preview-title{font-size:1.15rem;line-height:1.4;color:#174ea6;margin:4px 0}
+#seo-preview-description{font-size:.9rem;line-height:1.55;color:#52616c;margin:0}
+@media(max-width:560px){.seo-heading{align-items:flex-start;flex-direction:column}.publishing-seo{padding:12px}}

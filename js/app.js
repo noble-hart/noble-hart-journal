@@ -1,4 +1,5 @@
 import {INTEGRATIONS} from './integrations-config.js';
+import {importArticleFile,suggestPublishingFields} from './publishing-tools.js';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 // Supabase is loaded after the page renders, so a CDN/network failure cannot blank the blog.
 const configured = typeof SUPABASE_URL === 'string' && /^https:\/\/[^/]+\.supabase\.co\/?$/.test(SUPABASE_URL) && typeof SUPABASE_ANON_KEY === 'string' && SUPABASE_ANON_KEY.length > 20 && !SUPABASE_ANON_KEY.startsWith('PASTE_');
@@ -790,7 +791,7 @@ function editorAdmin(){
     <label>Type<select class="field" name="kind"><option value="article" ${p.kind!=='guide'?'selected':''}>Article</option><option value="guide" ${p.kind==='guide'?'selected':''}>Gift guide</option></select></label>
     <label>Status<select class="field" name="status"><option value="draft" ${p.status!=='published'?'selected':''}>Draft</option><option value="published" ${p.status==='published'?'selected':''}>Published</option></select></label>
     <label class="full">Short description / excerpt<textarea class="field" name="excerpt" maxlength="400">${esc(p.excerpt||'')}</textarea></label>
-    <div class="full"><label for="postbody">Article body</label><p class="mini muted" id="body-help">Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.</p><div class="html-import-controls"><label for="html-import">Import HTML gift guide (.html)</label><input id="html-import" type="file" accept=".html,text/html"><p class="mini muted" id="html-import-status" role="status">Import keeps tables, lists, links and supported callouts. The page title is taken from the Title field, not the HTML file.</p></div>
+    <div class="full"><label for="postbody">Article body</label><p class="mini muted" id="body-help">Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.</p><div class="html-import-controls"><label for="html-import">Import an article or document</label><input id="html-import" type="file" accept=".html,.htm,.docx,.pdf,.txt,text/html,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><p class="mini muted">HTML, Word (.docx), PDF with selectable text, or TXT. Word images and PDF layouts need manual review. Import replaces the article body only; an empty title can be filled automatically.</p><p class="mini muted" id="html-import-status" role="status" aria-live="polite"></p></div>
       <div class="editor-workspace"><div class="editor-sticky-controls"><div class="editor-mode-tabs" role="group" aria-label="Article editor mode">
         <button type="button" data-editor-mode="visual">Visual editor</button><button type="button" data-editor-mode="source">Source / Markdown</button><button type="button" data-editor-mode="preview">Preview</button>
       </div>
@@ -815,8 +816,7 @@ function editorAdmin(){
     </div>
     <label class="full">Featured image URL<input class="field" name="cover_url" type="url" value="${esc(p.cover_url||'')}"><small class="muted">Use Media Library to copy a previous image URL. <button type="button" class="inline-media-link" id="open-media">Open Media Library</button></small></label>
     <label class="full">Image alternative text<input class="field" name="cover_alt" value="${esc(p.cover_alt||'')}"></label>
-    <label>SEO title<input class="field" name="seo_title" value="${esc(p.seo_title||'')}"></label>
-    <label>SEO description<input class="field" name="seo_description" value="${esc(p.seo_description||'')}"></label>
+    <section class="full publishing-seo" aria-labelledby="seo-heading"><div class="seo-heading"><div><h2 id="seo-heading">SEO & search appearance</h2><p class="mini muted">Suggestions use your article content. Existing manual values are protected.</p></div><button class="btn ghost small" type="button" id="generate-seo">Generate suggestions</button></div><label>SEO title<input class="field" name="seo_title" value="${esc(p.seo_title||'')}"><small class="muted" id="seo-title-count"></small></label><label>SEO description<textarea class="field" name="seo_description" rows="3">${esc(p.seo_description||'')}</textarea><small class="muted" id="seo-description-count"></small></label><p class="mini muted" id="seo-feedback" role="status"></p><div class="seo-result-preview"><small class="muted">Illustrative Google search preview</small><div id="seo-preview-url"></div><div id="seo-preview-title"></div><p id="seo-preview-description"></p></div></section>
     </div><div class="actions"><button class="btn" type="submit">${p.id?'Save changes':'Create article'}</button><button type="button" class="btn ghost" id="cancel">Cancel</button></div><div id="saveinfo" role="status" aria-live="polite"></div></form></div>
     <dialog id="image-dialog" class="journal-modal"><form id="image-form"><h2>Insert image in article</h2><p class="mini muted">Place the cursor where the image should appear. Upload a new image or paste a Media Library image URL.</p><label>Upload image (optional)<input class="field" id="image-upload-file" type="file" accept="image/jpeg,image/png,image/webp"></label><label>Image URL<input class="field" id="image-url" type="url" placeholder="https://..."></label><label>Alternative text<input class="field" id="image-alt" maxlength="250" required placeholder="Describe the image for accessibility"></label><label>Caption (optional)<input class="field" id="image-caption" maxlength="240" placeholder="An optional caption below the image"></label><label>Image layout<select class="field" id="image-layout"><option value="center">Centered (text above and below)</option><option value="left">Left (text wraps on right)</option><option value="right">Right (text wraps on left)</option><option value="full">Full width</option></select></label><label>Image width<select class="field" id="image-width"><option value="25">25%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="75">75%</option><option value="100">100%</option></select></label><div class="link-dialog-actions"><button class="btn ghost" id="cancel-image" type="button">Cancel</button><button class="btn" id="insert-image" type="submit">Insert image</button></div><p class="link-error" id="image-error" role="alert"></p></form></dialog>
     <dialog id="table-dialog" class="journal-modal"><form id="table-form"><h2>Insert comparison table</h2><label>Columns<input class="field" id="table-columns" type="number" min="2" max="8" value="3" required></label><label>Data rows<input class="field" id="table-rows" type="number" min="1" max="20" value="3" required></label><div class="link-dialog-actions"><button class="btn ghost" type="button" id="cancel-table">Cancel</button><button class="btn" type="submit">Insert table</button></div></form></dialog>
@@ -864,7 +864,7 @@ function editorAdmin(){
   const command=(name,value=null)=>{
     if(editorMode!=='visual')return;
     restoreSelection();document.execCommand('styleWithCSS',false,false);
-    document.execCommand(name,false,value);visualDirty=true;rememberSelection();
+    document.execCommand(name,false,value);visualDirty=true;rememberSelection();scheduleSEO();
   };
   const insertRich=(markup)=>{
     // Construct only sanitized markup before adding it to the visual surface.
@@ -876,20 +876,70 @@ function editorAdmin(){
   document.querySelectorAll('[data-editor-mode]').forEach(b=>b.onclick=()=>setEditorMode(b.dataset.editorMode));
   document.querySelectorAll('[data-format],[data-visual-command],#open-link-dialog,#open-image-dialog,#insert-table,#insert-callout').forEach(b=>b.addEventListener('mousedown',e=>{if(editorMode==='visual'){rememberSelection();e.preventDefault()}}));
   document.querySelectorAll('[data-visual-command]').forEach(b=>b.onclick=()=>command(b.dataset.visualCommand));
+  const form=$('#postform'),titleField=form.elements.namedItem('title'),slugField=form.elements.namedItem('slug'),excerptField=form.elements.namedItem('excerpt'),seoTitleField=form.elements.namedItem('seo_title'),seoDescField=form.elements.namedItem('seo_description');
+  const autoValues=new Map(),manualFields=new Set();
+  let seoTimer=null,importing=false;
+  const readingHTML=()=>editorMode==='visual'&&visualDirty?sanitizeArticleHTML(visual.innerHTML):cleanedBody();
+  const displaySEO=()=>{
+    $('#seo-title-count').textContent=seoTitleField.value.length+' characters · aim for about 50–60';
+    $('#seo-description-count').textContent=seoDescField.value.length+' characters · aim for about 140–160';
+    $('#seo-preview-url').textContent=location.origin+'/post/'+(slugField.value||slug(titleField.value)||'your-article');
+    $('#seo-preview-title').textContent=seoTitleField.value||titleField.value||'Your article title';
+    $('#seo-preview-description').textContent=seoDescField.value||excerptField.value||'Your article description will appear here.';
+  };
+  function suggestSEO(force=false){
+    const html=readingHTML();
+    const excerptSource=excerptField.value===autoValues.get(excerptField)?'':excerptField.value;
+    const suggestions=suggestPublishingFields(titleField.value,excerptSource,html);
+    const values=[[seoTitleField,suggestions.seoTitle],[seoDescField,suggestions.seoDescription],[excerptField,suggestions.excerpt]];
+    if(!p.id)values.push([slugField,slug(titleField.value)]);
+    for(const [field,value] of values){
+      if(!value)continue;
+      const replaceable=!manualFields.has(field)&&(!field.value.trim()||field.value===autoValues.get(field));
+      if(force||replaceable){field.value=value;autoValues.set(field,value);manualFields.delete(field)}
+    }
+    displaySEO();
+  }
+  function scheduleSEO(){clearTimeout(seoTimer);seoTimer=setTimeout(()=>{if(form.isConnected&&!importing)suggestSEO()},500)}
+  for(const field of [slugField,excerptField,seoTitleField,seoDescField]){
+    field.addEventListener('input',()=>{manualFields.add(field);displaySEO();if(field===excerptField)scheduleSEO()});
+  }
+  titleField.addEventListener('input',()=>{displaySEO();scheduleSEO()});
+  visual.addEventListener('input',scheduleSEO);body.addEventListener('input',scheduleSEO);
+  $('#generate-seo').onclick=()=>{
+    if(!titleField.value.trim()&&!readingHTML().replace(/<[^>]*>/g,'').trim()){$('#seo-feedback').textContent='Add a title or article content first.';return}
+    if((seoTitleField.value.trim()||seoDescField.value.trim())&&!confirm('Regenerate SEO title and description from your current article? Your existing SEO text will be replaced.'))return;
+    const suggestions=suggestPublishingFields(titleField.value,excerptField.value,readingHTML());
+    for(const [field,value] of [[seoTitleField,suggestions.seoTitle],[seoDescField,suggestions.seoDescription]]){
+      if(value){field.value=value;autoValues.set(field,value);manualFields.delete(field)}
+    }
+    suggestSEO();$('#seo-feedback').textContent='Suggestions created. Review them before publishing.';
+  };
   $('#html-import').onchange=async e=>{
     const input=e.currentTarget,file=input.files?.[0],feedback=$('#html-import-status');
-    if(!file)return;
+    if(!file||importing)return;
     if(editorMode==='visual')syncVisual();
-    if(!/\.html?$/i.test(file.name)||file.size>500000){feedback.textContent='Choose a .html file smaller than 500 KB.';input.value='';return}
-    if(body.value.trim()&&!confirm('Replace the current article body with this HTML file? Your other fields will not change.')){input.value='';return}
+    if(body.value.trim()&&!confirm('Replace the current article body with this document? Existing title, category and manual SEO values will be kept.')){input.value='';return}
+    importing=true;input.disabled=true;
+    const save=form.querySelector('button[type="submit"]');save.disabled=true;
+    const initialBody=body.value;
+    feedback.textContent='Reading document…';
     try{
-      const clean=sanitizeArticleHTML(await file.text());
-      if(!clean.trim())throw new Error('No readable article content was found.');
+      const result=await importArticleFile(file,message=>{feedback.textContent=message});
+      if(!form.isConnected)return;
+      if(editorMode==='visual')syncVisual();
+      if(body.value!==initialBody&&!confirm('The article changed while the file was being read. Replace those changes with the imported document?')){feedback.textContent='Import cancelled; your edits have been kept.';return}
+      const clean=sanitizeArticleHTML(result.html);
+      const check=new DOMParser().parseFromString(clean,'text/html');
+      if(!check.body.textContent.trim()&&!check.body.querySelector('img'))throw Error('No readable article content was found.');
+      if(!titleField.value.trim()&&result.title)titleField.value=result.title;
       body.value=RICH_HTML_PREFIX+clean;visualDirty=false;
-      setEditorMode('visual');feedback.textContent='Imported safely. Edit the text directly, or switch to Source or Preview.';
-    }catch(err){feedback.textContent='Could not import HTML: '+err.message}
-    input.value='';
+      setEditorMode('visual');suggestSEO();
+      feedback.textContent='Imported into the visual editor. '+(result.warnings.length?result.warnings.join(' '):'Review your content and SEO before publishing.');
+    }catch(err){feedback.textContent='Could not import: '+(err.message||'Unknown error')}
+    finally{importing=false;input.disabled=false;input.value='';save.disabled=false}
   };
+  displaySEO();
   $('#open-media').onclick=()=>{if(confirm('Leave the editor? Unsaved changes will be lost. Save your draft first.')){state.view='media';drawAdmin()}};
   const insertFormat=type=>{
     if(editorMode==='visual'){
@@ -996,9 +1046,10 @@ function editorAdmin(){
   $('#insert-callout').onclick=()=>insertRich('<p class="nh-check"><strong>Before you buy:</strong> Add your advice here.</p>');
   $('#toggle-preview').onclick=()=>setEditorMode('preview');
   setEditorMode(isRich()||!body.value.trim()?'visual':'source');
+  if(titleField.value.trim()||body.value.trim())suggestSEO();
   $('#cancel').onclick=()=>{state.view='posts';drawAdmin()};
   $('#postform').onsubmit=async e=>{
-    e.preventDefault();if(editorMode==='visual')syncVisual();if(!body.value.trim()||!cleanedBody().replace(/<[^>]*>/g,'').trim()&&!/<img\b/i.test(cleanedBody())){$('#saveinfo').innerHTML=error('Please add article content.');return}const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
+    e.preventDefault();if(importing)return;if(editorMode==='visual')syncVisual();suggestSEO();if(!body.value.trim()||!cleanedBody().replace(/<[^>]*>/g,'').trim()&&!/<img\b/i.test(cleanedBody())){$('#saveinfo').innerHTML=error('Please add article content.');return}const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
     if(isRich())obj.body=RICH_HTML_PREFIX+cleanedBody();
     obj.slug=slug(obj.slug||obj.title);if(!obj.slug)return;
     obj.published_at=obj.status==='published'?(p.published_at||new Date().toISOString()):null;
