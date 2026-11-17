@@ -144,8 +144,8 @@ const paragraphs = body => {
 
 // HTML gift-guide support: sanitize on import, preview and public rendering.
 const RICH_HTML_PREFIX='<!--NH_RICH_HTML_V1-->';
-const richTags=new Set(['P','H2','H3','H4','STRONG','B','EM','I','A','UL','OL','LI','BLOCKQUOTE','BR','HR','DIV','SPAN','TABLE','THEAD','TBODY','TR','TH','TD','FIGURE','FIGCAPTION','IMG']);
-const richClasses=new Set(['nh-kicker','nh-check','nh-reference','nh-table-wrap','nh-note','nh-eyebrow']);
+const richTags=new Set(['P','H2','H3','H4','STRONG','B','EM','I','U','S','STRIKE','CODE','A','UL','OL','LI','BLOCKQUOTE','BR','HR','DIV','SPAN','TABLE','THEAD','TBODY','TR','TH','TD','FIGURE','FIGCAPTION','IMG']);
+const richClasses=new Set(['nh-kicker','nh-check','nh-reference','nh-table-wrap','nh-note','nh-eyebrow','journal-inline-figure','nh-img-left','nh-img-right','nh-img-center','nh-img-full','nh-img-w25','nh-img-w40','nh-img-w50','nh-img-w75','nh-img-w100','nh-align-left','nh-align-center','nh-align-right']);
 const droppedTags=new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','FORM','INPUT','BUTTON','SELECT','TEXTAREA','SVG','MATH','LINK','META','BASE','TEMPLATE','NOSCRIPT','VIDEO','AUDIO','CANVAS']);
 function sanitizeArticleHTML(source){
   const parsed=new DOMParser().parseFromString(String(source||''),'text/html');
@@ -159,6 +159,9 @@ function sanitizeArticleHTML(source){
     if(richTags.has(tag)){
       const el=document.createElement(tag.toLowerCase());
       const classes=[...node.classList].filter(c=>richClasses.has(c));
+      // Convert only known browser-generated text styles into semantic tags or approved classes.
+      const align=(node.style?.textAlign||node.getAttribute('align')||'').toLowerCase();
+      if(['left','center','right'].includes(align)&&!classes.some(c=>c.startsWith('nh-align-')))classes.push('nh-align-'+align);
       if(classes.length)el.className=classes.join(' ');
       if(tag==='A'){
         const raw=node.getAttribute('href')||'';
@@ -180,6 +183,16 @@ function sanitizeArticleHTML(source){
         el.setAttribute('decoding','async');
       }
       parent.appendChild(el);dest=el;
+      // Preserve supported inline formatting produced by browser editing, without retaining CSS.
+      const style=node.style;
+      if(style&&tag!=='IMG'){
+        const wrappers=[];
+        if(style.fontWeight==='bold'||Number(style.fontWeight)>=600)wrappers.push('strong');
+        if(style.fontStyle==='italic')wrappers.push('em');
+        if((style.textDecorationLine||style.textDecoration).includes('underline'))wrappers.push('u');
+        if((style.textDecorationLine||style.textDecoration).includes('line-through'))wrappers.push('s');
+        for(const name of wrappers){const wrap=document.createElement(name);dest.appendChild(wrap);dest=wrap}
+      }
     }
     for(const child of node.childNodes)copy(child,dest);
   };
@@ -700,18 +713,26 @@ function editorAdmin(){
     <label>Status<select class="field" name="status"><option value="draft" ${p.status!=='published'?'selected':''}>Draft</option><option value="published" ${p.status==='published'?'selected':''}>Published</option></select></label>
     <label class="full">Short description / excerpt<textarea class="field" name="excerpt" maxlength="400">${esc(p.excerpt||'')}</textarea></label>
     <div class="full"><label for="postbody">Article body</label><p class="mini muted" id="body-help">Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.</p><div class="html-import-controls"><label for="html-import">Import HTML gift guide (.html)</label><input id="html-import" type="file" accept=".html,text/html"><p class="mini muted" id="html-import-status" role="status">Import keeps tables, lists, links and supported callouts. The page title is taken from the Title field, not the HTML file.</p></div>
+      <div class="editor-mode-tabs" role="group" aria-label="Article editor mode">
+        <button type="button" data-editor-mode="visual">Visual editor</button><button type="button" data-editor-mode="source">Source / Markdown</button><button type="button" data-editor-mode="preview">Preview</button>
+      </div>
       <div class="editor-toolbar" id="markdown-toolbar" role="toolbar" aria-label="Article formatting">
         <button type="button" data-format="bold" title="Bold (Ctrl+B)"><b>B</b></button>
         <button type="button" data-format="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+        <button type="button" data-visual-command="underline" title="Underline"><u>U</u></button><button type="button" data-visual-command="strikeThrough" title="Strikethrough"><s>S</s></button>
         <button type="button" data-format="h2">H2</button><button type="button" data-format="h3">H3</button>
         <button type="button" data-format="bullets" title="Bulleted list">• List</button>
         <button type="button" data-format="numbered" title="Numbered list">1. List</button>
         <button type="button" data-format="quote">❝ Quote</button>
         <button type="button" id="open-link-dialog" title="Insert a link in selected text">🔗 Link</button>
         <button type="button" id="open-image-dialog" title="Insert an image into the article">▣ Image</button>
+        <button type="button" data-visual-command="justifyLeft" title="Align text left">Align left</button><button type="button" data-visual-command="justifyCenter" title="Center text">Center</button><button type="button" data-visual-command="justifyRight" title="Align text right">Align right</button>
+        <button type="button" id="insert-table">Table</button><button type="button" id="insert-callout">Callout</button>
+        <button type="button" data-visual-command="undo">Undo</button><button type="button" data-visual-command="redo">Redo</button>
         <button type="button" id="toggle-preview" aria-pressed="false">Preview</button>
       </div>
-      <textarea id="postbody" class="field editor-body" name="body" required>${esc(p.body||'')}</textarea>
+      <div id="visual-body" class="visual-article-editor article-body rich-guide" contenteditable="true" role="textbox" aria-label="Visual article editor" aria-multiline="true" hidden></div>
+      <textarea id="postbody" class="field editor-body" name="body">${esc(p.body||'')}</textarea>
       <div class="editor-preview article-body" id="editor-preview" hidden></div>
     </div>
     <label class="full">Featured image URL<input class="field" name="cover_url" type="url" value="${esc(p.cover_url||'')}"><small class="muted">Use Media Library to copy a previous image URL. <button type="button" class="inline-media-link" id="open-media">Open Media Library</button></small></label>
@@ -719,137 +740,187 @@ function editorAdmin(){
     <label>SEO title<input class="field" name="seo_title" value="${esc(p.seo_title||'')}"></label>
     <label>SEO description<input class="field" name="seo_description" value="${esc(p.seo_description||'')}"></label>
     </div><div class="actions"><button class="btn" type="submit">${p.id?'Save changes':'Create article'}</button><button type="button" class="btn ghost" id="cancel">Cancel</button></div><div id="saveinfo" role="status" aria-live="polite"></div></form></div>
-    <dialog id="image-dialog" class="journal-modal"><form id="image-form"><h2>Insert image in article</h2><p class="mini muted">Place the cursor where the image should appear. Upload a new image or paste a Media Library image URL.</p><label>Upload image (optional)<input class="field" id="image-upload-file" type="file" accept="image/jpeg,image/png,image/webp"></label><label>Image URL<input class="field" id="image-url" type="url" placeholder="https://..."></label><label>Alternative text<input class="field" id="image-alt" maxlength="250" required placeholder="Describe the image for accessibility"></label><label>Caption (optional)<input class="field" id="image-caption" maxlength="240" placeholder="An optional caption below the image"></label><div class="link-dialog-actions"><button class="btn ghost" id="cancel-image" type="button">Cancel</button><button class="btn" id="insert-image" type="submit">Insert image</button></div><p class="link-error" id="image-error" role="alert"></p></form></dialog>
+    <dialog id="image-dialog" class="journal-modal"><form id="image-form"><h2>Insert image in article</h2><p class="mini muted">Place the cursor where the image should appear. Upload a new image or paste a Media Library image URL.</p><label>Upload image (optional)<input class="field" id="image-upload-file" type="file" accept="image/jpeg,image/png,image/webp"></label><label>Image URL<input class="field" id="image-url" type="url" placeholder="https://..."></label><label>Alternative text<input class="field" id="image-alt" maxlength="250" required placeholder="Describe the image for accessibility"></label><label>Caption (optional)<input class="field" id="image-caption" maxlength="240" placeholder="An optional caption below the image"></label><label>Image layout<select class="field" id="image-layout"><option value="center">Centered (text above and below)</option><option value="left">Left (text wraps on right)</option><option value="right">Right (text wraps on left)</option><option value="full">Full width</option></select></label><label>Image width<select class="field" id="image-width"><option value="25">25%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="75">75%</option><option value="100">100%</option></select></label><div class="link-dialog-actions"><button class="btn ghost" id="cancel-image" type="button">Cancel</button><button class="btn" id="insert-image" type="submit">Insert image</button></div><p class="link-error" id="image-error" role="alert"></p></form></dialog>
+    <dialog id="table-dialog" class="journal-modal"><form id="table-form"><h2>Insert comparison table</h2><label>Columns<input class="field" id="table-columns" type="number" min="2" max="8" value="3" required></label><label>Data rows<input class="field" id="table-rows" type="number" min="1" max="20" value="3" required></label><div class="link-dialog-actions"><button class="btn ghost" type="button" id="cancel-table">Cancel</button><button class="btn" type="submit">Insert table</button></div></form></dialog>
     <dialog id="link-dialog" class="journal-modal"><form id="link-form"><h2>Insert a link</h2><p class="muted">Selected text becomes a clickable link in your article.</p><label>Text to display<input class="field" id="link-text" required maxlength="300"></label><label>Link URL<input class="field" id="link-url" type="url" placeholder="https://example.com" required></label><div class="link-dialog-actions"><button class="btn ghost" id="paste-link" type="button">⧉ Paste URL</button><button class="btn ghost" id="cancel-link" type="button">Cancel</button><button class="btn" type="submit">Insert link</button></div><p class="link-error" id="link-error" role="alert"></p></form></dialog>`;
-  const body=$('#postbody'),preview=$('#editor-preview');
-   const updateBodyMode=()=>{
-     const html=body.value.startsWith(RICH_HTML_PREFIX);
-     $('#markdown-toolbar').hidden=false;
-     $('#body-help').textContent=html?'HTML guide mode: select article text (not HTML tags), use the formatting buttons, and choose Preview to inspect tables and callouts. You can also import another .html file.':'Select text, then choose Bold, Italic, Heading, Link, Quote or List. Use Preview to check the final appearance.';
-   };
-   $('#html-import').onchange=async e=>{
-     const file=e.currentTarget.files?.[0];
-     if(!file)return;
-     const feedback=$('#html-import-status');
-     if(!/\.html?$/i.test(file.name)||file.size>500000){feedback.textContent='Choose a .html file smaller than 500 KB.';e.currentTarget.value='';return}
-     if(body.value.trim()&&!confirm('Replace the current article body with this HTML file? Your other fields will not change.')){e.currentTarget.value='';return}
-     try{
-       const clean=sanitizeArticleHTML(await file.text());
-       if(!clean.trim())throw new Error('No readable article content was found.');
-       body.value=RICH_HTML_PREFIX+clean;
-       updateBodyMode();
-       feedback.textContent='HTML imported safely. Tables and callouts are preserved. Preview before saving.';
-       if(!preview.hidden)preview.innerHTML=richBody(body.value);
-     }catch(err){feedback.textContent='Could not import HTML: '+err.message}
-     e.currentTarget.value='';
-   };
-   updateBodyMode();
-   $('#open-media').onclick=()=>{state.view='media';drawAdmin()};
+  const body=$('#postbody'),preview=$('#editor-preview'),visual=$('#visual-body');
+  let editorMode='source',previousMode='source',savedRange=null,visualDirty=false;
+  const isRich=()=>body.value.startsWith(RICH_HTML_PREFIX);
+  const cleanedBody=()=>sanitizeArticleHTML(isRich()?body.value.slice(RICH_HTML_PREFIX.length):paragraphs(body.value));
+  const refreshPreview=()=>preview.innerHTML=richBody(body.value)||'<p class="muted">Start writing to see a preview.</p>';
+  const syncVisual=()=>{
+    if(visualDirty){body.value=RICH_HTML_PREFIX+sanitizeArticleHTML(visual.innerHTML);visualDirty=false}
+  };
+  function setEditorMode(mode){
+    if(editorMode==='visual')syncVisual();
+    if(mode==='preview'&&editorMode!=='preview')previousMode=editorMode;
+    editorMode=mode;savedRange=null;
+    body.hidden=mode!=='source';visual.hidden=mode!=='visual';preview.hidden=mode!=='preview';
+    $('#markdown-toolbar').hidden=mode==='preview';
+    for(const b of document.querySelectorAll('[data-editor-mode]'))b.setAttribute('aria-pressed',String(b.dataset.editorMode===mode));
+    for(const b of document.querySelectorAll('[data-visual-command]'))b.disabled=mode!=='visual';
+    $('#body-help').textContent=mode==='visual'?'Edit the formatted article directly. Select text for formatting; click in a paragraph to insert content.':mode==='source'?(isRich()?'Edit the cleaned HTML source. Switch to Visual editor for easy text editing.':'Write Markdown or switch to Visual editor for formatted editing.'):'Read-only preview of the article body.';
+    $('#toggle-preview').textContent='Preview';
+    if(mode==='visual'){visual.innerHTML=cleanedBody()||'<p><br></p>';visualDirty=false}
+    if(mode==='preview')refreshPreview();
+  }
+  const rememberSelection=()=>{
+    if(editorMode!=='visual')return;
+    const selection=window.getSelection();
+    if(selection?.rangeCount){const range=selection.getRangeAt(0);if(visual.contains(range.commonAncestorContainer))savedRange=range.cloneRange()}
+  };
+  const restoreSelection=()=>{
+    visual.focus();
+    const selection=window.getSelection();if(!selection)return;
+    if(savedRange&&visual.contains(savedRange.commonAncestorContainer)){selection.removeAllRanges();selection.addRange(savedRange)}
+    else{const range=document.createRange();range.selectNodeContents(visual);range.collapse(false);selection.removeAllRanges();selection.addRange(range)}
+  };
+  visual.addEventListener('mouseup',rememberSelection);
+  visual.addEventListener('keyup',rememberSelection);
+  visual.addEventListener('input',()=>{visualDirty=true;rememberSelection()});
+  // Pasted content is text-only so foreign styling and unsafe markup cannot enter the editor.
+  visual.addEventListener('paste',e=>{
+    e.preventDefault();document.execCommand('insertText',false,e.clipboardData?.getData('text/plain')||'');visualDirty=true;rememberSelection();
+  });
+  visual.addEventListener('drop',e=>{e.preventDefault()});
+  const command=(name,value=null)=>{
+    if(editorMode!=='visual')return;
+    restoreSelection();document.execCommand('styleWithCSS',false,false);
+    document.execCommand(name,false,value);visualDirty=true;rememberSelection();
+  };
+  const insertRich=(markup)=>{
+    // Construct only sanitized markup before adding it to the visual surface.
+    if(editorMode==='visual'){command('insertHTML',sanitizeArticleHTML(markup));return}
+    if(!isRich()){body.value=RICH_HTML_PREFIX+cleanedBody();body.setSelectionRange(body.value.length,body.value.length)}
+    const a=Math.max(RICH_HTML_PREFIX.length,body.selectionStart),b=Math.max(a,body.selectionEnd);
+    body.setRangeText(markup,a,b,'end');body.focus();
+  };
+  document.querySelectorAll('[data-editor-mode]').forEach(b=>b.onclick=()=>setEditorMode(b.dataset.editorMode));
+  document.querySelectorAll('[data-format],[data-visual-command],#open-link-dialog,#open-image-dialog,#insert-table,#insert-callout').forEach(b=>b.addEventListener('mousedown',e=>{if(editorMode==='visual'){rememberSelection();e.preventDefault()}}));
+  document.querySelectorAll('[data-visual-command]').forEach(b=>b.onclick=()=>command(b.dataset.visualCommand));
+  $('#html-import').onchange=async e=>{
+    const input=e.currentTarget,file=input.files?.[0],feedback=$('#html-import-status');
+    if(!file)return;
+    if(editorMode==='visual')syncVisual();
+    if(!/\.html?$/i.test(file.name)||file.size>500000){feedback.textContent='Choose a .html file smaller than 500 KB.';input.value='';return}
+    if(body.value.trim()&&!confirm('Replace the current article body with this HTML file? Your other fields will not change.')){input.value='';return}
+    try{
+      const clean=sanitizeArticleHTML(await file.text());
+      if(!clean.trim())throw new Error('No readable article content was found.');
+      body.value=RICH_HTML_PREFIX+clean;visualDirty=false;
+      setEditorMode('visual');feedback.textContent='Imported safely. Edit the text directly, or switch to Source or Preview.';
+    }catch(err){feedback.textContent='Could not import HTML: '+err.message}
+    input.value='';
+  };
+  $('#open-media').onclick=()=>{if(confirm('Leave the editor? Unsaved changes will be lost. Save your draft first.')){state.view='media';drawAdmin()}};
   const insertFormat=type=>{
-    const html=body.value.startsWith(RICH_HTML_PREFIX);
-    const a=body.selectionStart,b=body.selectionEnd,selected=body.value.slice(a,b);
+    if(editorMode==='visual'){
+      const cmds={bold:['bold'],italic:['italic'],h2:['formatBlock','h2'],h3:['formatBlock','h3'],quote:['formatBlock','blockquote'],bullets:['insertUnorderedList'],numbered:['insertOrderedList']};
+      if(cmds[type])command(...cmds[type]);return;
+    }
+    const html=isRich(),a=body.selectionStart,b=body.selectionEnd,selected=body.value.slice(a,b);
     let replacement=selected||'your text';
     if(html){
-      // Format selected text in HTML source, not with Markdown syntax.
       const tags={bold:'strong',italic:'em',h2:'h2',h3:'h3',quote:'blockquote'};
-      if(tags[type]){
-        const tag=tags[type];
-        replacement=`<${tag}>${selected||'Text'}</${tag}>`;
-      }else if(type==='bullets'||type==='numbered'){
-        const list=type==='bullets'?'ul':'ol';
-        const items=(selected||'List item').split(/\r?\n/).filter(line=>line.trim()).map(line=>`<li>${line}</li>`).join('');
-        replacement=`<${list}>${items}</${list}>`;
-      }
+      if(tags[type]){const tag=tags[type];replacement='<'+tag+'>'+(selected||'Text')+'</'+tag+'>'}
+      else if(type==='bullets'||type==='numbered'){const list=type==='bullets'?'ul':'ol';replacement='<'+list+'>'+(selected||'List item').split(/\r?\n/).filter(line=>line.trim()).map(line=>'<li>'+line+'</li>').join('')+'</'+list+'>'}
     }else{
-      if(type==='bold')replacement=`**${replacement}**`;
-      if(type==='italic')replacement=`*${replacement}*`;
+      if(type==='bold')replacement='**'+replacement+'**';
+      if(type==='italic')replacement='*'+replacement+'*';
       if(['h2','h3','quote','bullets','numbered'].includes(type)){
         const prefix={h2:'## ',h3:'### ',quote:'> ',bullets:'- ',numbered:'1. '}[type];
-        replacement=(selected||'Text').split('\n').map((line,i)=>type==='numbered'?`${i+1}. ${line}`:`${prefix}${line}`).join('\n');
+        replacement=(selected||'Text').split('\n').map((line,i)=>type==='numbered'?(i+1)+'. '+line:prefix+line).join('\n');
         if(a>0&&body.value[a-1]!=='\n')replacement='\n'+replacement;
         if(b<body.value.length&&body.value[b]!=='\n')replacement+='\n';
       }
     }
-    body.setRangeText(replacement,a,b,'select');body.focus();
-    if(!preview.hidden)preview.innerHTML=richBody(body.value);
+    body.setRangeText(replacement,Math.max(html?RICH_HTML_PREFIX.length:0,a),Math.max(html?RICH_HTML_PREFIX.length:0,b),'select');body.focus();
   };
+  document.querySelectorAll('[data-format]').forEach(b=>b.onclick=()=>insertFormat(b.dataset.format));
+  body.onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&['b','i'].includes(e.key.toLowerCase())){e.preventDefault();insertFormat(e.key.toLowerCase()==='b'?'bold':'italic')}};
   const linkDialog=$('#link-dialog');let linkStart=0,linkEnd=0;
   $('#open-link-dialog').onclick=()=>{
-    linkStart=body.selectionStart;linkEnd=body.selectionEnd;
-    $('#link-text').value=body.value.slice(linkStart,linkEnd)||'';$('#link-url').value='';$('#link-error').textContent='';
-    linkDialog.showModal();($('#link-text').value?$('#link-url'):$('#link-text')).focus();
+    rememberSelection();linkStart=body.selectionStart;linkEnd=body.selectionEnd;
+    $('#link-text').value=editorMode==='visual'?(savedRange?.toString()||''):body.value.slice(linkStart,linkEnd);
+    $('#link-url').value='';$('#link-error').textContent='';linkDialog.showModal();
   };
   $('#cancel-link').onclick=()=>linkDialog.close();
-  $('#paste-link').onclick=async()=>{try{$('#link-url').value=await navigator.clipboard.readText();$('#link-error').textContent=''}catch{$('#link-error').textContent='Paste is unavailable in this browser. Use Ctrl+V (or Cmd+V) instead.'}};
+  $('#paste-link').onclick=async()=>{try{$('#link-url').value=await navigator.clipboard.readText()}catch{$('#link-error').textContent='Use Ctrl+V or Cmd+V to paste the URL.'}};
   $('#link-form').onsubmit=e=>{
     e.preventDefault();const label=$('#link-text').value.trim(),url=$('#link-url').value.trim();
-    if(!label||!/^(https?:\/\/)[^\s<>\[\]()]+$/i.test(url)){$('#link-error').textContent='Enter text and a complete http:// or https:// link without spaces or parentheses.';return}
-    const html=body.value.startsWith(RICH_HTML_PREFIX);
-    const replacement=html?`<a href="${url.replaceAll('&','&amp;').replaceAll('"','&quot;')}">${esc(label)}</a>`:`[${label.replace(/[\[\]]/g,'')}](${url})`;
-    body.setRangeText(replacement,linkStart,linkEnd,'end');linkDialog.close();body.focus();if(!preview.hidden)preview.innerHTML=richBody(body.value);
+    if(!label||!/^https?:\/\/[^\s<>\[\]()]+$/i.test(url)){$('#link-error').textContent='Enter text and a valid HTTP or HTTPS URL without spaces.';return}
+    linkDialog.close();
+    if(editorMode==='visual'){insertRich('<a href="'+esc(url)+'">'+esc(label)+'</a>');return}
+    const markup=isRich()?'<a href="'+esc(url)+'">'+esc(label)+'</a>':'['+label.replace(/[\[\]]/g,'')+']('+url+')';
+    body.setRangeText(markup,linkStart,linkEnd,'end');body.focus();
   };
-  // Insert inline images without leaving the editor. The same Media Library
-  // storage bucket is used as for featured images; no extra secret or table.
-  const imageDialog=$('#image-dialog');
-  let imageInsertStart=0,imageInsertEnd=0;
+  const imageDialog=$('#image-dialog');let imageInsertStart=0,imageInsertEnd=0,selectedFigure=null;
   $('#open-image-dialog').onclick=()=>{
-    imageInsertStart=body.selectionStart;imageInsertEnd=body.selectionEnd;
-    $('#image-error').textContent='';
-    $('#image-url').value='';$('#image-upload-file').value='';
-    $('#image-alt').value='';$('#image-caption').value='';
-    imageDialog.showModal();$('#image-url').focus();
+    rememberSelection();imageInsertStart=body.selectionStart;imageInsertEnd=body.selectionEnd;
+    $('#image-error').textContent='';$('#image-url').value='';$('#image-upload-file').value='';$('#image-alt').value='';$('#image-caption').value='';$('#image-layout').value='center';$('#image-width').value='50';
+    selectedFigure=null;$('#insert-image').textContent='Insert image';
+    imageDialog.showModal();
   };
+  visual.addEventListener('click',e=>{
+    const img=e.target.closest('img');if(!img||!visual.contains(img))return;
+    const figure=img.closest('figure');if(!figure)return;
+    selectedFigure=figure;$('#image-error').textContent='';
+    $('#image-url').value=img.getAttribute('src')||'';$('#image-upload-file').value='';
+    $('#image-alt').value=img.getAttribute('alt')||'';$('#image-caption').value=figure.querySelector('figcaption')?.textContent||'';
+    $('#image-layout').value=['left','right','center','full'].find(x=>figure.classList.contains('nh-img-'+x))||'center';
+    $('#image-width').value=['25','40','50','75','100'].find(x=>figure.classList.contains('nh-img-w'+x))||'100';
+    $('#insert-image').textContent='Update image';imageDialog.showModal();
+  });
   $('#cancel-image').onclick=()=>imageDialog.close();
+  $('#image-layout').onchange=e=>{if(e.target.value==='full')$('#image-width').value='100';else if(['left','right'].includes(e.target.value))$('#image-width').value='40'};
   $('#image-form').onsubmit=async e=>{
-    e.preventDefault();
-    const submit=$('#insert-image');submit.disabled=true;
-    const imageError=$('#image-error');
-    imageError.textContent='';
-    let url=$('#image-url').value.trim();
-    const file=$('#image-upload-file').files[0];
-    const alt=$('#image-alt').value.trim().slice(0,250);
-    const caption=$('#image-caption').value.trim().slice(0,240);
-    if(!alt){imageError.textContent='Please add descriptive alternative text.';submit.disabled=false;return}
-    if(file){
-      if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024){
-        imageError.textContent='Choose JPG, PNG or WebP under 5 MB.';submit.disabled=false;return;
+    e.preventDefault();const submit=$('#insert-image'),imageError=$('#image-error');submit.disabled=true;imageError.textContent='';
+    try{
+      let url=$('#image-url').value.trim();const file=$('#image-upload-file').files[0],alt=$('#image-alt').value.trim(),caption=$('#image-caption').value.trim();
+      if(!alt)throw Error('Please add descriptive alternative text.');
+      if(file){
+        if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024)throw Error('Choose JPG, PNG or WebP under 5 MB.');
+        const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type],key=crypto.randomUUID()+'.'+ext;
+        const {error:uploadError}=await db.storage.from('journal-images').upload(key,file,{contentType:file.type});
+        if(uploadError)throw Error('Upload failed: '+uploadError.message);
+        url=db.storage.from('journal-images').getPublicUrl(key).data.publicUrl;
       }
-      const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type];
-      const key=`${crypto.randomUUID()}.${ext}`;
-      const {error:uploadError}=await db.storage.from('journal-images').upload(key,file,{contentType:file.type});
-      if(uploadError){imageError.textContent='Upload failed: '+uploadError.message;submit.disabled=false;return}
-      url=db.storage.from('journal-images').getPublicUrl(key).data.publicUrl;
-    }
-    const safe=safeArticleImageURL(url);
-    if(!safe){imageError.textContent='Enter a full HTTPS image URL or upload an image.';submit.disabled=false;return}
-    const html=body.value.startsWith(RICH_HTML_PREFIX);
-    let markup;
-    if(html){
-      const source=esc(safe),text=esc(alt);
-      markup=`<figure class="journal-inline-figure"><img src="${source}" alt="${text}" loading="lazy">${caption?`<figcaption>${esc(caption)}</figcaption>`:''}</figure>`;
-    }else{
-      // Standalone Markdown image line; optional caption uses italic Markdown.
-      const cleanAlt=alt.replace(/[\[\]]/g,'');
-      markup='\n\n!['+cleanAlt+']('+safe+')'+(caption?'\n\n*'+caption.replace(/[*\n]/g,'')+'*':'')+'\n\n';
-    }
-    body.setRangeText(markup,imageInsertStart,imageInsertEnd,'end');
-    if(!preview.hidden)refreshPreview();
-    imageDialog.close();body.focus();submit.disabled=false;
+      const safe=safeArticleImageURL(url);if(!safe)throw Error('Enter a full HTTP or HTTPS image URL or upload an image.');
+      const layout=$('#image-layout').value,requestedWidth=$('#image-width').value;
+      if(!['left','right','center','full'].includes(layout)||!['25','40','50','75','100'].includes(requestedWidth))throw Error('Choose an available image layout and width.');
+      const width=layout==='full'?'100':(['left','right'].includes(layout)&&Number(requestedWidth)>50?'50':requestedWidth);
+      const markup='<figure class="journal-inline-figure nh-img-'+layout+' nh-img-w'+width+'"><img src="'+esc(safe)+'" alt="'+esc(alt)+'" loading="lazy">'+(caption?'<figcaption>'+esc(caption)+'</figcaption>':'')+'</figure>';
+      if(selectedFigure&&visual.contains(selectedFigure)){
+        const t=document.createElement('template');t.innerHTML=sanitizeArticleHTML(markup);selectedFigure.replaceWith(t.content);visualDirty=true;imageDialog.close();visual.focus();
+      }else if(editorMode==='visual'){imageDialog.close();insertRich(markup)}
+      else{
+        if(!isRich()){
+          // Convert Markdown to equivalent rich content without discarding the existing article.
+          // Anchor the insertion between Markdown fragments, preserving cursor position.
+          const before=paragraphs(body.value.slice(0,imageInsertStart)),after=paragraphs(body.value.slice(imageInsertEnd));
+          body.value=RICH_HTML_PREFIX+sanitizeArticleHTML(before+markup+after);body.setSelectionRange(body.value.length,body.value.length);
+        }else body.setRangeText(markup,Math.max(RICH_HTML_PREFIX.length,imageInsertStart),Math.max(RICH_HTML_PREFIX.length,imageInsertEnd),'end');
+        imageDialog.close();body.focus();
+      }
+    }catch(err){imageError.textContent=err.message||'Could not insert image.'}
+    finally{submit.disabled=false;selectedFigure=null}
   };
-
-  document.querySelectorAll('[data-format]').forEach(button=>button.onclick=()=>insertFormat(button.dataset.format));
-  const refreshPreview=()=>preview.innerHTML=richBody(body.value)||'<p class="muted">Start writing to see a preview.</p>';
-  $('#toggle-preview').onclick=e=>{
-    const showing=preview.hidden;preview.hidden=!showing;
-    e.currentTarget.setAttribute('aria-pressed',String(showing));
-    e.currentTarget.textContent=showing?'Hide preview':'Preview';
-    if(showing)refreshPreview();
+  const tableDialog=$('#table-dialog');
+  $('#insert-table').onclick=()=>{rememberSelection();tableDialog.showModal()};
+  $('#cancel-table').onclick=()=>tableDialog.close();
+  $('#table-form').onsubmit=e=>{
+    e.preventDefault();
+    const cols=Number($('#table-columns').value),rows=Number($('#table-rows').value);
+    if(!Number.isInteger(cols)||!Number.isInteger(rows)||cols<2||cols>8||rows<1||rows>20)return;
+    const table='<div class="nh-table-wrap"><table><thead><tr>'+Array.from({length:cols},(_,i)=>'<th scope="col">Heading '+(i+1)+'</th>').join('')+'</tr></thead><tbody>'+Array.from({length:rows},()=>'<tr>'+Array.from({length:cols},()=>'<td>Text</td>').join('')+'</tr>').join('')+'</tbody></table></div><p><br></p>';
+    tableDialog.close();insertRich(table);
   };
-  body.oninput=()=>{updateBodyMode();if(!preview.hidden)refreshPreview()};
-  body.onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&['b','i'].includes(e.key.toLowerCase())){e.preventDefault();insertFormat(e.key.toLowerCase()==='b'?'bold':'italic')}};
+  $('#insert-callout').onclick=()=>insertRich('<p class="nh-check"><strong>Before you buy:</strong> Add your advice here.</p>');
+  $('#toggle-preview').onclick=()=>setEditorMode('preview');
+  setEditorMode(isRich()||!body.value.trim()?'visual':'source');
   $('#cancel').onclick=()=>{state.view='posts';drawAdmin()};
   $('#postform').onsubmit=async e=>{
-    e.preventDefault();const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
+    e.preventDefault();if(editorMode==='visual')syncVisual();if(!body.value.trim()||!cleanedBody().replace(/<[^>]*>/g,'').trim()&&!/<img\b/i.test(cleanedBody())){$('#saveinfo').innerHTML=error('Please add article content.');return}const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
     obj.slug=slug(obj.slug||obj.title);if(!obj.slug)return;
     obj.published_at=obj.status==='published'?(p.published_at||new Date().toISOString()):null;
     const res=p.id?await db.from('posts').update(obj).eq('id',p.id):await db.from('posts').insert(obj);
