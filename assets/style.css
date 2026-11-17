@@ -198,13 +198,9 @@ a.card:hover, a.card:focus-visible {
 .html-import-controls input[type=file]{display:block;max-width:100%;font:inherit;font-size:.9rem}
 .html-import-controls p{margin:8px 0 0}
 #markdown-toolbar[hidden]{display:none!important}
-.rich-guide{--nh-burgundy:#861f2b;--nh-green:#174b3a;--nh-cream:#fff8ed;--nh-gold:#c49a50;color:#25352e;background:#fffdf9;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;font-size:17px;line-height:1.75;padding:clamp(18px,3vw,36px);border-radius:12px;overflow-wrap:anywhere}
+.rich-guide{--nh-burgundy:#861f2b;--nh-green:#174b3a;--nh-cream:#fff8ed;--nh-gold:#c49a50;color:inherit;background:transparent;font-family:inherit;font-size:inherit;line-height:inherit;padding:0;border-radius:0;overflow-wrap:anywhere}
 .rich-guide *{box-sizing:border-box}
-.rich-guide h2,.rich-guide h3,.rich-guide h4{line-height:1.28;letter-spacing:-.02em}
-.rich-guide h2{color:var(--nh-green);font-size:clamp(1.35rem,2.6vw,1.85rem);margin:2.2rem 0 .75rem;border-bottom:1px solid #e9e2d8;padding-bottom:.55rem}
-.rich-guide h3{color:var(--nh-burgundy);font-size:1.13rem;margin:1.5rem 0 .4rem}
-.rich-guide p{margin:.7rem 0 1rem}
-.rich-guide a{color:#7e2430;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.rich-guide a{overflow-wrap:anywhere}
 .rich-guide a:focus-visible{outline:3px solid var(--nh-gold);outline-offset:3px}
 .rich-guide .nh-kicker{font-size:.93rem;color:var(--nh-burgundy);font-weight:650;letter-spacing:.02em}
 .rich-guide .nh-check{background:var(--nh-cream);border-left:4px solid var(--nh-gold);padding:.8rem 1.1rem;border-radius:0 8px 8px 0}
@@ -217,10 +213,7 @@ a.card:hover, a.card:focus-visible {
 .rich-guide th{text-align:left;background:var(--nh-green);color:#fff;font-weight:650;padding:12px 14px}
 .rich-guide td{padding:12px 14px;border-top:1px solid #eee7dc;vertical-align:top}
 .rich-guide tbody tr:nth-child(even){background:#fbf6ed}
-.rich-guide ul,.rich-guide ol{padding-left:1.5rem}
-.rich-guide li{margin:.5rem 0}
-.rich-guide blockquote{border-left:3px solid var(--nh-gold);padding:.7rem 1rem;background:var(--nh-cream)}
-@media(max-width:600px){.rich-guide{font-size:16px;padding:18px 14px}.rich-guide table{font-size:.88rem}.rich-guide h2{margin-top:1.8rem}}
+@media(max-width:600px){.rich-guide table{font-size:.88rem}}
 
 /* V16: Inline article and gift-guide images. Keep natural aspect ratios. */
 .article-body .journal-inline-figure,
@@ -266,3 +259,7 @@ a.card:hover, a.card:focus-visible {
   .rich-guide figure.nh-img-w25,.rich-guide figure.nh-img-w40,.rich-guide figure.nh-img-w50,.rich-guide figure.nh-img-w75{max-width:100%}
   .visual-article-editor{padding:14px}
 }
+
+/* V17.1: Rich article content shares the standard article canvas. */
+.rich-guide:not(.visual-article-editor){margin:0;width:100%;min-width:0}
+.rich-guide:not(.visual-article-editor)>.nh-eyebrow:first-child{display:none}
