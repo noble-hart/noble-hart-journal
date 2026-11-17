@@ -197,6 +197,9 @@ function sanitizeArticleHTML(source){
     for(const child of node.childNodes)copy(child,dest);
   };
   for(const child of root.childNodes)copy(child,target);
+  // The page heading already identifies the publication and category. Remove only redundant leading brand labels.
+  const lead=target.firstElementChild;
+  if(lead?.classList.contains('nh-eyebrow')&&/^Noble\s+Hart(?:\s+Journal)?(?:\s*[·•|–—:\-]\s*.*)?$/i.test(lead.textContent.trim()))lead.remove();
   for(const table of target.querySelectorAll('table')){
     if(table.parentElement?.classList.contains('nh-table-wrap'))continue;
     const wrap=document.createElement('div');wrap.className='nh-table-wrap';table.replaceWith(wrap);wrap.appendChild(table);
