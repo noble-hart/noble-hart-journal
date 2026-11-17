@@ -262,4 +262,4 @@ a.card:hover, a.card:focus-visible {
 
 /* V17.1: Rich article content shares the standard article canvas. */
 .rich-guide:not(.visual-article-editor){margin:0;width:100%;min-width:0}
-.rich-guide:not(.visual-article-editor)>.nh-eyebrow:first-child{display:none}
+.visual-article-editor.rich-guide{font-size:1.09rem;line-height:1.85;color:var(--ink);background:#fff}
