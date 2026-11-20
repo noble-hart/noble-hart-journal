@@ -515,7 +515,7 @@ async function loadEngagement(p){
   dialog.innerHTML='<div class="nh-feedback-header"><span class="eyebrow">Noble Hart Journal</span><button class="btn ghost small" type="button" data-feedback-close aria-label="Close feedback">×</button></div><h2 id="feedback-title">Enjoyed this article?</h2><p>We would love to hear what you think. Your feedback helps us create more useful articles.</p><button type="button" class="btn ghost" id="feedback-like">♡ Like this article</button><div class="nh-rating-panel" id="feedback-rating"></div><form id="feedback-commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" maxlength="60" name="name" placeholder="Your name"></label><label>Comment<textarea class="field" name="body" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div><p class="reply-status" role="status"></p></form><button class="btn ghost" type="button" data-feedback-close>Maybe later</button>';
   document.body.append(dialog);
   // Remove detached route UI if this page is replaced in the same document.
-  const observer=new MutationObserver(()=>{if(!normal.isConnected){observer.disconnect();endObserver.disconnect();window.removeEventListener('scroll',markScroll);if(window.turnstile&&popupForm.dataset.turnstileWidget){try{window.turnstile.remove(popupForm.dataset.turnstileWidget)}catch{}}dialog.remove()}});
+  const observer=new MutationObserver(()=>{if(!normal.isConnected){observer.disconnect();endObserver.disconnect();clearFeedbackDelay();if(closeTimer)clearTimeout(closeTimer);window.removeEventListener('scroll',markScroll);document.removeEventListener('visibilitychange',onVisibilityChange);if(window.turnstile&&popupForm.dataset.turnstileWidget){try{window.turnstile.remove(popupForm.dataset.turnstileWidget)}catch{}}dialog.remove()}});
   const popupForm=dialog.querySelector('form'),popupStatus=popupForm.querySelector('.reply-status');
   const popupLike=dialog.querySelector('#feedback-like'),panels=[$('#article-rating'),dialog.querySelector('#feedback-rating')]; 
   panels.forEach(el=>el.innerHTML=ratingMarkup());
@@ -546,12 +546,45 @@ async function loadEngagement(p){
   }
   bindComment(normal,$('#commentname'),$('#commenttext'),normalStatus);bindComment(popupForm,popupForm.elements.name,popupForm.elements.body,popupStatus);
   mountTurnstile(normal,'journal_comment');syncCommentCooldown(normal);
-  let popupMounted=false;dialog.querySelectorAll('[data-feedback-close]').forEach(b=>b.onclick=()=>dialog.close());
-  dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
   const seenKey='nh-feedback-seen-'+p.id;
-  const end=$('#article-feedback');let scrolled=false;
-  const endObserver=new IntersectionObserver(entries=>{if(!entries.some(e=>e.isIntersecting)||!scrolled||sessionStorage.getItem(seenKey)||dialog.open||document.querySelector('dialog[open]'))return;sessionStorage.setItem(seenKey,'1');endObserver.disconnect();dialog.showModal();if(!popupMounted){popupMounted=true;mountTurnstile(popupForm,'journal_comment')}syncCommentCooldown(popupForm)},{threshold:0.1});
-  const markScroll=()=>{if(window.scrollY>40){scrolled=true;endObserver.observe(end);window.removeEventListener('scroll',markScroll)}};window.addEventListener('scroll',markScroll,{passive:true});
+  const end=$('#article-feedback');
+  let popupMounted=false,scrolled=false,atArticleEnd=false,feedbackDelay=null,closeTimer=null;
+  const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
+  const clearFeedbackDelay=()=>{if(feedbackDelay!==null){clearTimeout(feedbackDelay);feedbackDelay=null}};
+  const onVisibilityChange=()=>{if(document.hidden)clearFeedbackDelay();else if(atArticleEnd)scheduleFeedback()};
+  function closeFeedback(){
+    if(!dialog.open||dialog.classList.contains('nh-feedback-closing'))return;
+    if(reducedMotion.matches){dialog.close();return}
+    dialog.classList.add('nh-feedback-closing');
+    closeTimer=setTimeout(()=>{closeTimer=null;if(dialog.open)dialog.close();dialog.classList.remove('nh-feedback-closing')},200);
+  }
+  dialog.querySelectorAll('[data-feedback-close]').forEach(b=>b.onclick=closeFeedback);
+  dialog.addEventListener('cancel',e=>{e.preventDefault();closeFeedback()});
+  dialog.addEventListener('close',()=>{if(closeTimer)clearTimeout(closeTimer);closeTimer=null;dialog.classList.remove('nh-feedback-closing')});
+  dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeFeedback()}});
+  function scheduleFeedback(){
+    if(feedbackDelay!==null||!scrolled||!atArticleEnd||document.hidden||!normal.isConnected||sessionStorage.getItem(seenKey)||dialog.open)return;
+    feedbackDelay=setTimeout(()=>{
+      feedbackDelay=null;
+      // The reader must still be at the end when the full pause has elapsed.
+      if(!scrolled||!atArticleEnd||document.hidden||!normal.isConnected||sessionStorage.getItem(seenKey)||dialog.open||document.querySelector('dialog[open]'))return;
+      sessionStorage.setItem(seenKey,'1');
+      endObserver.disconnect();
+      dialog.showModal();
+      if(!popupMounted){popupMounted=true;mountTurnstile(popupForm,'journal_comment')}
+      syncCommentCooldown(popupForm);
+    },1500);
+  }
+  const endObserver=new IntersectionObserver(entries=>{
+    atArticleEnd=entries.some(e=>e.isIntersecting);
+    if(!atArticleEnd)clearFeedbackDelay();
+    else scheduleFeedback();
+  },{threshold:0.1});
+  const markScroll=()=>{
+    if(window.scrollY>40){scrolled=true;endObserver.observe(end);window.removeEventListener('scroll',markScroll)}
+  };
+  window.addEventListener('scroll',markScroll,{passive:true});
+  document.addEventListener('visibilitychange',onVisibilityChange);
   observer.observe(document.body,{childList:true,subtree:true});
   if(!sessionStorage.getItem(seenKey)&&window.scrollY>40)markScroll();
   await loadRating();
