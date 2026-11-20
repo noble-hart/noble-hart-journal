@@ -404,7 +404,7 @@ function syncCommentCooldown(form){
 }
 function recordSuccessfulComment(){
   localStorage.setItem(COMMENT_COOLDOWN_KEY,String(Date.now()));
-  document.querySelectorAll('#commentform,.reply-form').forEach(syncCommentCooldown);
+  document.querySelectorAll('#commentform,#feedback-commentform,.reply-form').forEach(syncCommentCooldown);
 }
 
 async function submitVerifiedComment(payload){
@@ -420,7 +420,7 @@ async function submitVerifiedComment(payload){
   return result.id;
 }
 
-async function article(sl){if(!db){frame('<div class="wrap section"><p class="muted">Loading article…</p></div>');return}const {data:p,error:postError}=await db.from('posts').select('id,title,slug,category,kind,status,excerpt,body,cover_url,cover_alt,seo_title,seo_description,published_at,created_at,updated_at').eq('status','published').eq('slug',sl).maybeSingle();if(postError){frame('<div class="wrap section"><h1>Unable to load story</h1><p>Please refresh to try again.</p></div>');return}if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt,absoluteCover(p.cover_url),'article');articleSchema(p);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${richBody(p.body)}</div><div class="engage"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div><section class="related-reading" aria-labelledby="related-title"><div class="section-head"><div><div class="eyebrow">Discover more</div><h2 id="related-title">Continue reading</h2></div><a href="/articles">Browse all articles →</a></div><div id="related-post-results"><p class="muted">Loading related stories…</p></div></section></article>`);await Promise.all([loadEngagement(p),loadRelatedPosts(p)])}
+async function article(sl){if(!db){frame('<div class="wrap section"><p class="muted">Loading article…</p></div>');return}const {data:p,error:postError}=await db.from('posts').select('id,title,slug,category,kind,status,excerpt,body,cover_url,cover_alt,seo_title,seo_description,published_at,created_at,updated_at').eq('status','published').eq('slug',sl).maybeSingle();if(postError){frame('<div class="wrap section"><h1>Unable to load story</h1><p>Please refresh to try again.</p></div>');return}if(!p){frame('<div class="wrap section"><h1>Story not found</h1><p>This article may have moved or is not yet published.</p><a href="/articles">Browse articles</a></div>');return}meta(p.seo_title||p.title,p.seo_description||p.excerpt,absoluteCover(p.cover_url),'article');articleSchema(p);frame(`<div class="pagehead"><div class="wrap" style="max-width:900px"><div class="eyebrow"><a href="/articles">Journal</a> / ${esc(p.category||'Article')}</div><h1>${esc(p.title)}</h1><div class="meta">${date(p.published_at||p.created_at)} · ${Math.max(1,Math.ceil((p.body||'').split(/\s+/).length/220))} min read</div></div></div><article class="article">${p.cover_url?`<img class="article-image" src="${esc(absoluteCover(p.cover_url))}" alt="${esc(p.cover_alt||p.title)}">`:''}<p class="lead">${esc(p.excerpt||'')}</p><div class="article-body">${richBody(p.body)}</div><div class="engage" id="article-feedback"><button class="btn ghost" id="like">♡ Like this article <span class="count" id="likes">…</span></button><div class="nh-rating-panel" id="article-rating"></div></div><div class="engage comment-section"><div class="comment-heading"><div><div class="eyebrow">Reader perspectives</div><h2>Join the conversation</h2></div><span class="comment-count" id="commentcount"></span></div><p class="mini muted">Thoughtful comments may appear right away. Potential spam or harmful content is held for review. Please don't share personal information.</p><form id="commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" id="commentname" maxlength="60" placeholder="Your name"></label><label>Comment<textarea class="field" id="commenttext" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div></form><div id="commentstatus" role="status" aria-live="polite"></div><div id="comments" class="comment-list"></div></div><section class="related-reading" aria-labelledby="related-title"><div class="section-head"><div><div class="eyebrow">Discover more</div><h2 id="related-title">Continue reading</h2></div><a href="/articles">Browse all articles →</a></div><div id="related-post-results"><p class="muted">Loading related stories…</p></div></section></article>`);await Promise.all([loadEngagement(p),loadRelatedPosts(p)])}
 function renderComments(items, helpfulCounts={}, articlePost=null){
   const count=items.length;
   $('#commentcount').textContent=`${count} ${count===1?'comment':'comments'}`;
@@ -506,40 +506,55 @@ async function refreshEngagement(p){
   if(helpfulRes.error)console.warn('Helpful counts:',helpfulRes.error);
   renderComments(commentsRes.data||[],counts,p);
 }
+function ratingMarkup(){return '<p class="nh-rating-summary" aria-live="polite">Loading reader ratings…</p><fieldset class="nh-rating-field"><legend>How helpful was this article?</legend><div class="nh-stars">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-label="Rate '+n+' out of 5 stars" aria-pressed="false">☆</button>').join('')+'</div></fieldset><p class="nh-rating-status mini muted" role="status"></p>'}
 async function loadEngagement(p){
-  if(!db){$('#likes').textContent='0';renderComments([]);$('#like').disabled=true;$('#commentform').onsubmit=e=>{e.preventDefault();$('#commentstatus').innerHTML=error('Database not connected.')};return}
   await refreshEngagement(p);
-  mountTurnstile($('#commentform'),'journal_comment');
-  syncCommentCooldown($('#commentform'));
-  const storageKey='nh-like-'+p.id;
-  $('#like').disabled=!!localStorage.getItem(storageKey);
-  $('#like').onclick=async()=>{
-    let visitor=localStorage.getItem('nh-visitor');
-    if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-visitor',visitor)}
-    const {error:err}=await db.from('likes').insert({post_id:p.id,visitor_id:visitor});
-    if(!err||err.code==='23505'){localStorage.setItem(storageKey,'1');$('#like').disabled=true;await refreshEngagement(p)}
-    else alert('Unable to record your like right now.');
-  };
-  $('#commentform').onsubmit=async e=>{
-    e.preventDefault();const name=$('#commentname').value.trim(),body=$('#commenttext').value.trim();
-    if(body.length<3)return;
-    let visitor=localStorage.getItem('nh-comment-visitor');
-    if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}
-    const button=$('#commentform button');
-    if(secondsUntilNextComment()){syncCommentCooldown($('#commentform'));return}
-    $('#commentform').dataset.commentSubmitting='true';button.disabled=true;
-    const challenge=verifiedToken($('#commentform'));
-    if(!challenge){$('#commentstatus').innerHTML=error('Please complete the security check before posting.');button.disabled=false;return}
-    const token=crypto.randomUUID();
-    try{
-      const commentId=await submitVerifiedComment({post_id:p.id,parent_id:null,name:name||'Reader',body,visitor_id:visitor,edit_token:token,turnstile_token:challenge});
-      localStorage.setItem('nh-edit-'+commentId,token);
-      recordSuccessfulComment();
-      $('#commentstatus').innerHTML=status('Thanks! Your comment was received. Comments that pass our checks appear automatically; others await review.');
-      $('#commentform').reset();await refreshEngagement(p);
-    }catch(err){console.warn('Comment submission:',err);$('#commentstatus').innerHTML=error(err.message)}
-    finally{delete $('#commentform').dataset.commentSubmitting;resetCommentChallenge($('#commentform'));syncCommentCooldown($('#commentform'))}
-  };
+  const normal=$('#commentform'),normalStatus=$('#commentstatus'),like=$('#like');
+  const dialog=document.createElement('dialog');dialog.className='journal-modal nh-feedback-dialog';
+  dialog.setAttribute('aria-labelledby','feedback-title');
+  dialog.innerHTML='<div class="nh-feedback-header"><span class="eyebrow">Noble Hart Journal</span><button class="btn ghost small" type="button" data-feedback-close aria-label="Close feedback">×</button></div><h2 id="feedback-title">Enjoyed this article?</h2><p>We would love to hear what you think. Your feedback helps us create more useful articles.</p><button type="button" class="btn ghost" id="feedback-like">♡ Like this article</button><div class="nh-rating-panel" id="feedback-rating"></div><form id="feedback-commentform"><div class="comment-form-grid"><label>Name (optional)<input class="field" maxlength="60" name="name" placeholder="Your name"></label><label>Comment<textarea class="field" name="body" required minlength="3" maxlength="1500" placeholder="Share your thoughts…"></textarea></label><div class="full"><button class="btn" type="submit">Post comment</button></div></div><p class="reply-status" role="status"></p></form><button class="btn ghost" type="button" data-feedback-close>Maybe later</button>';
+  document.body.append(dialog);
+  // Remove detached route UI if this page is replaced in the same document.
+  const observer=new MutationObserver(()=>{if(!normal.isConnected){observer.disconnect();endObserver.disconnect();window.removeEventListener('scroll',markScroll);if(window.turnstile&&popupForm.dataset.turnstileWidget){try{window.turnstile.remove(popupForm.dataset.turnstileWidget)}catch{}}dialog.remove()}});
+  const popupForm=dialog.querySelector('form'),popupStatus=popupForm.querySelector('.reply-status');
+  const popupLike=dialog.querySelector('#feedback-like'),panels=[$('#article-rating'),dialog.querySelector('#feedback-rating')]; 
+  panels.forEach(el=>el.innerHTML=ratingMarkup());
+  const ratingKey='nh-rating-visitor';let ratingVisitor=localStorage.getItem(ratingKey);
+  if(!ratingVisitor){ratingVisitor=crypto.randomUUID();localStorage.setItem(ratingKey,ratingVisitor)}
+  let ratingBusy=false,ratingAvailable=false,myRating=0;
+  function paintRating(row){
+    myRating=Number(row.my_rating)||0;const n=Number(row.rating_count)||0;
+    panels.forEach(el=>{el.querySelector('.nh-rating-summary').textContent=n?Number(row.average_rating).toFixed(1)+' / 5 · '+n+' reader rating'+(n===1?'':'s'):'No ratings yet. Be the first to rate.';el.querySelectorAll('[data-rating]').forEach(b=>{const v=Number(b.dataset.rating);b.textContent=v<=myRating?'★':'☆';b.setAttribute('aria-pressed',String(v===myRating));b.disabled=ratingBusy||!ratingAvailable})})
+  }
+  async function loadRating(){const {data,error:err}=await db.rpc('journal_article_rating',{p_post_id:p.id,p_visitor_id:ratingVisitor});ratingAvailable=!err&&!!data?.[0];if(ratingAvailable)paintRating(data[0]);else panels.forEach(el=>{el.querySelector('.nh-rating-summary').textContent='Ratings are temporarily unavailable.';el.querySelectorAll('button').forEach(b=>b.disabled=true)})}
+  panels.forEach(el=>el.querySelectorAll('[data-rating]').forEach(b=>{b.disabled=true;b.onclick=async()=>{if(ratingBusy||!ratingAvailable)return;ratingBusy=true;panels.forEach(x=>x.querySelectorAll('button').forEach(k=>k.disabled=true));try{const {error:err}=await db.rpc('journal_rate_article',{p_post_id:p.id,p_visitor_id:ratingVisitor,p_rating:Number(b.dataset.rating)});if(err)throw err;await loadRating();panels.forEach(x=>x.querySelector('.nh-rating-status').textContent='Thank you for your rating. You can change it anytime.')}catch(err){panels.forEach(x=>x.querySelector('.nh-rating-status').textContent='Unable to save your rating. Please try again.')}finally{ratingBusy=false;panels.forEach(x=>x.querySelectorAll('button').forEach(k=>k.disabled=!ratingAvailable))}}}));
+  const storageKey='nh-like-'+p.id;let likeBusy=false;
+  function paintLike(){const liked=!!localStorage.getItem(storageKey);like.disabled=popupLike.disabled=liked||likeBusy;like.setAttribute('aria-pressed',String(liked));popupLike.setAttribute('aria-pressed',String(liked));popupLike.textContent=(liked?'♥ Liked':'♡ Like this article')+' · '+($('#likes').textContent||'0');like.firstChild.textContent=liked?'♥ Liked ':'♡ Like this article '}
+  async function sendLike(){if(likeBusy||localStorage.getItem(storageKey))return;likeBusy=true;paintLike();try{let visitor=localStorage.getItem('nh-visitor');if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-visitor',visitor)}const {error:err}=await db.from('likes').insert({post_id:p.id,visitor_id:visitor});if(err&&err.code!=='23505')throw err;localStorage.setItem(storageKey,'1');await refreshEngagement(p)}catch(err){alert('Unable to record your like right now.')}finally{likeBusy=false;paintLike()}}
+  like.onclick=popupLike.onclick=sendLike;paintLike();
+  let commentBusy=false;
+  function bindComment(form,nameField,bodyField,feedback){
+    form.onsubmit=async e=>{
+      e.preventDefault();const name=nameField.value.trim(),body=bodyField.value.trim();if(body.length<3||commentBusy)return;
+      if(secondsUntilNextComment()){syncCommentCooldown(form);return}
+      const challenge=verifiedToken(form);if(!challenge){feedback.textContent='Please complete the security check before posting.';return}
+      commentBusy=true;form.dataset.commentSubmitting='true';form.querySelector('button[type=submit]').disabled=true;
+      try{let visitor=localStorage.getItem('nh-comment-visitor');if(!visitor){visitor=crypto.randomUUID();localStorage.setItem('nh-comment-visitor',visitor)}const token=crypto.randomUUID();const commentId=await submitVerifiedComment({post_id:p.id,parent_id:null,name:name||'Reader',body,visitor_id:visitor,edit_token:token,turnstile_token:challenge});localStorage.setItem('nh-edit-'+commentId,token);recordSuccessfulComment();const msg='Thanks! Your comment was received. Comments that pass our checks appear automatically; others await review.';normalStatus.textContent=popupStatus.textContent=msg;form.reset();await refreshEngagement(p)}
+      catch(err){feedback.textContent=err.message||'Unable to submit comment. Please try again.'}
+      finally{commentBusy=false;delete form.dataset.commentSubmitting;resetCommentChallenge(form);syncCommentCooldown(form)}
+    };
+  }
+  bindComment(normal,$('#commentname'),$('#commenttext'),normalStatus);bindComment(popupForm,popupForm.elements.name,popupForm.elements.body,popupStatus);
+  mountTurnstile(normal,'journal_comment');syncCommentCooldown(normal);
+  let popupMounted=false;dialog.querySelectorAll('[data-feedback-close]').forEach(b=>b.onclick=()=>dialog.close());
+  dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
+  const seenKey='nh-feedback-seen-'+p.id;
+  const end=$('#article-feedback');let scrolled=false;
+  const endObserver=new IntersectionObserver(entries=>{if(!entries.some(e=>e.isIntersecting)||!scrolled||sessionStorage.getItem(seenKey)||dialog.open||document.querySelector('dialog[open]'))return;sessionStorage.setItem(seenKey,'1');endObserver.disconnect();dialog.showModal();if(!popupMounted){popupMounted=true;mountTurnstile(popupForm,'journal_comment')}syncCommentCooldown(popupForm)},{threshold:0.1});
+  const markScroll=()=>{if(window.scrollY>40){scrolled=true;endObserver.observe(end);window.removeEventListener('scroll',markScroll)}};window.addEventListener('scroll',markScroll,{passive:true});
+  observer.observe(document.body,{childList:true,subtree:true});
+  if(!sessionStorage.getItem(seenKey)&&window.scrollY>40)markScroll();
+  await loadRating();
 }
 function contactFormHTML(){
  const cfg=INTEGRATIONS.emailjs;
@@ -663,7 +678,7 @@ The Noble Hart Journal (“we”, “our” or “the Journal”) publishes arti
 ## 2. Information we collect
 **Information you choose to provide:** Your chosen display name and comment or reply text, email address when you request newsletter updates, and information you include in a message sent to us.
 
-**Website interaction information:** We may use browser-based identifiers and local storage to support likes, helpful votes and newsletter-invitation preferences. Our hosting and service providers may also process technical information such as IP address, device/browser information and request logs to provide, secure and maintain the website.
+**Website interaction information:** We may use browser-based identifiers and local storage to support likes, article ratings, helpful votes and feedback or newsletter-invitation preferences. Our hosting and service providers may also process technical information such as IP address, device/browser information and request logs to provide, secure and maintain the website.
 
 Please do not share sensitive information in public comments.
 
@@ -678,7 +693,7 @@ If approved or automatically published after screening, your comment and chosen 
 Do not post private information about yourself or another person. Published content may be copied by others outside our control.
 
 ## 5. Likes, helpful votes and browser storage
-We use local browser storage and identifiers to support some features, including reducing accidental repeat likes or helpful votes and remembering whether a newsletter invitation was dismissed. Counts are not identity-verified measures of unique individuals. You can clear stored identifiers using browser settings, though this may reset preferences.
+We use local browser storage and identifiers to support some features, including reducing accidental repeat likes, ratings or helpful votes and remembering whether a newsletter invitation was dismissed. Counts are not identity-verified measures of unique individuals. You can clear stored identifiers using browser settings, though this may reset preferences.
 
 If non-essential tracking or advertising technologies are introduced, we will update this Policy and provide additional controls or consent where required.
 
@@ -795,7 +810,7 @@ async function admin(){
   if(!state.admin){frame(`<div class="login"><h2>Access not granted</h2><p>You are signed in, but your account has not been added to <code>admin_users</code>.</p><p class="mini">Signed in as ${esc(state.session.user.email)}</p><button class="btn ghost" id="logout">Sign out</button></div>`);$('#logout').onclick=signout;return}
   await loadAdmin();drawAdmin();
 }
-async function loadAdmin(){const [a,b,c]=await Promise.all([db.from('posts').select('id,title,slug,category,kind,status,excerpt,body,cover_url,cover_alt,seo_title,seo_description,created_at,updated_at,published_at,is_pinned').order('created_at',{ascending:false}),db.from('comments').select('*,posts(title)').order('created_at',{ascending:false}),db.from('likes').select('post_id')]);state.posts=a.data||[];state.comments=b.data||[];state.likes=c.data||[]}
+async function loadAdmin(){const [a,b,c]=await Promise.all([db.from('posts').select('id,title,slug,category,kind,status,excerpt,body,cover_url,cover_alt,seo_title,seo_description,created_at,updated_at,published_at,is_pinned').order('created_at',{ascending:false}),db.from('comments').select('*,posts(title)').order('created_at',{ascending:false}),db.from('likes').select('post_id')]);state.posts=a.data||[];state.comments=b.data||[];state.likes=c.data||[];const e=await db.rpc('journal_admin_engagement');state.engagement=e.error?null:Object.fromEntries((e.data||[]).map(x=>[x.post_id,x]))}
 function drawAdmin(){const views=['overview','posts','editor','comments','likes','categories','media','account'];frame(`<div class="admin-shell"><aside class="sidebar">${views.map(v=>`<button data-view="${v}" class="${state.view===v?'selected':''}">${({overview:'◫ Overview',posts:'▤ Articles',editor:'✎ Write / Edit',comments:'☏ Comments',likes:'♡ Likes',categories:'▦ Categories',media:'▧ Media',account:'⚿ Account'})[v]}</button>`).join('')}<button id="logout">↪ Sign out</button></aside><div class="admin-main"><div class="eyebrow">Noble Hart / Admin</div><h1 style="font-size:2.1rem">${({overview:'Dashboard',posts:'Articles',editor:'Article editor',comments:'Comment moderation',likes:'Article likes',categories:'Categories',media:'Media library',account:'Account security'})[state.view]}</h1><div id="adminbody"></div></div></div>`);document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;if(state.view==='editor')state.editing=null;drawAdmin()});$('#logout').onclick=signout;const el=$('#adminbody');if(state.view==='overview')el.innerHTML=`<div class="stats dashboard-stats">
 <button class="stat stat-link" data-stat="published" aria-label="View published articles"><strong>${state.posts.filter(p=>p.status==='published').length}</strong>Published <span aria-hidden="true">↗</span></button>
 <button class="stat stat-link" data-stat="draft" aria-label="View drafts"><strong>${state.posts.filter(p=>p.status==='draft').length}</strong>Drafts <span aria-hidden="true">↗</span></button>
@@ -805,7 +820,7 @@ function drawAdmin(){const views=['overview','posts','editor','comments','likes'
 function postsAdmin(){
  const filter=state.postFilter||'all';
  const rows=state.posts.filter(p=>filter==='all'||p.status===filter);
- $('#adminbody').innerHTML=`<div class="admin-filterbar"><button class="btn" id="newpost">+ New article</button><label for="post-status-filter">Show <select class="field" id="post-status-filter"><option value="all" ${filter==='all'?'selected':''}>All articles</option><option value="published" ${filter==='published'?'selected':''}>Published</option><option value="draft" ${filter==='draft'?'selected':''}>Drafts</option></select></label></div><div class="panel"><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Type</th><th>Updated</th><th>Actions</th></tr></thead><tbody>${rows.map(p=>`<tr><td>${esc(p.title)}${p.is_pinned?'<small class="admin-pin-label"> · Featured</small>':''}</td><td>${esc(p.status)}</td><td>${esc(p.kind)}</td><td>${date(p.updated_at)}</td><td><button class="btn small ghost" data-edit="${p.id}">Edit</button> ${p.status==='published'&&p.slug?`<a class="btn small ghost" href="/post/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener noreferrer" aria-label="View ${esc(p.title)} (opens in a new tab)">View</a>`:''} ${p.status==='published'?`<button class="btn small ghost" data-pin="${p.id}" aria-pressed="${!!p.is_pinned}">${p.is_pinned?'Unpin':'Pin'}</button>`:''} <button class="btn small danger" data-delete="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="5">No articles in this filter.</td></tr>'}</tbody></table></div>`;
+ $('#adminbody').innerHTML=`<div class="admin-filterbar"><button class="btn" id="newpost">+ New article</button><label for="post-status-filter">Show <select class="field" id="post-status-filter"><option value="all" ${filter==='all'?'selected':''}>All articles</option><option value="published" ${filter==='published'?'selected':''}>Published</option><option value="draft" ${filter==='draft'?'selected':''}>Drafts</option></select></label></div><div class="panel"><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Type</th><th>Updated</th><th>Engagement</th><th>Actions</th></tr></thead><tbody>${rows.map(p=>`<tr><td>${esc(p.title)}${p.is_pinned?'<small class="admin-pin-label"> · Featured</small>':''}</td><td>${esc(p.status)}</td><td>${esc(p.kind)}</td><td>${date(p.updated_at)}</td><td>${state.engagement?`<div class="mini nh-admin-engagement">♡ ${state.engagement[p.id]?.like_count??0} likes<br>Comments: ${state.engagement[p.id]?.comment_count??0}<br>★ ${state.engagement[p.id]?.average_rating??"—"} (${state.engagement[p.id]?.rating_count??0} ratings)</div>`:"—"}</td><td><button class="btn small ghost" data-edit="${p.id}">Edit</button> ${p.status==='published'&&p.slug?`<a class="btn small ghost" href="/post/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener noreferrer" aria-label="View ${esc(p.title)} (opens in a new tab)">View</a>`:''} ${p.status==='published'?`<button class="btn small ghost" data-pin="${p.id}" aria-pressed="${!!p.is_pinned}">${p.is_pinned?'Unpin':'Pin'}</button>`:''} <button class="btn small danger" data-delete="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="6">No articles in this filter.</td></tr>'}</tbody></table></div>`;
  $('#post-status-filter').onchange=e=>{state.postFilter=e.target.value;postsAdmin()};
  $('#newpost').onclick=()=>{state.editing=null;state.view='editor';drawAdmin()};
  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{state.editing=state.posts.find(p=>p.id===b.dataset.edit);state.view='editor';drawAdmin()});
