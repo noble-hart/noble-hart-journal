@@ -321,3 +321,32 @@ a.card:hover, a.card:focus-visible {
 #seo-preview-title{font-size:1.15rem;line-height:1.4;color:#174ea6;margin:4px 0}
 #seo-preview-description{font-size:.9rem;line-height:1.55;color:#52616c;margin:0}
 @media(max-width:560px){.seo-heading{align-items:flex-start;flex-direction:column}.publishing-seo{padding:12px}}
+
+/* Responsive article media, accessible FAQ and reusable media picker */
+.article,.article-body,.rich-guide,.editor-workspace,.form-grid>*{min-width:0;overflow-wrap:anywhere}
+.article-body img,.article-body video,.article-body iframe{max-width:100%;box-sizing:border-box}
+.article-body img{height:auto;object-fit:contain}
+.article-body figure{max-width:100%;box-sizing:border-box}
+.article-body .nh-video{float:none;clear:both;width:100%;max-width:100%;margin:1.5rem auto}
+.article-body video.nh-video{display:block;width:auto;max-width:100%;max-height:75vh;height:auto;margin:0 auto;background:#111;border-radius:10px}
+.article-body iframe.nh-video{display:block;width:100%;aspect-ratio:16/9;height:auto;border:0;border-radius:10px}
+.article-body details.nh-faq{clear:both;margin:12px 0;padding:0 16px;border:1px solid #dce5df;border-radius:10px;background:#fff}
+.article-body details.nh-faq summary{cursor:pointer;font-weight:750;color:var(--navy);padding:14px 0;line-height:1.5;min-height:44px}
+.article-body details.nh-faq summary:focus-visible{outline:2px solid #517c9e;outline-offset:3px}
+.article-body details.nh-faq p{margin:0 0 14px}
+.journal-modal{max-height:90dvh;overflow:auto}
+.journal-modal.nh-media-picker{width:min(94vw,780px)}
+.nh-media-picker .media-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
+.nh-picker-item{text-align:left;background:#fff;border:1px solid #dce5ed;padding:8px;display:flex;flex-direction:column;gap:6px;color:var(--ink)}
+.nh-picker-item:hover,.nh-picker-item:focus-visible{outline:2px solid #517c9e}
+.nh-picker-item>img{width:100%;height:110px;object-fit:contain;background:#f5f7fa}
+.nh-picker-item>span{font-size:.78rem;word-break:break-word;line-height:1.35}
+@media(max-width:600px){
+ .article{padding-left:16px;padding-right:16px}
+ .article-body{font-size:1rem;line-height:1.75}
+ .article-body .rich-guide figure.nh-img-left,.article-body .rich-guide figure.nh-img-right,.article-body .rich-guide figure.nh-img-center,.article-body.rich-guide figure.journal-inline-figure{float:none;clear:both;width:min(100%,480px);max-width:100%;margin:1.2rem auto}
+ .article-body .rich-guide .journal-inline-figure img{width:100%;height:auto;max-height:none}
+ .article-body .nh-table-wrap{max-width:100%;overflow-x:auto}
+ .journal-modal{padding:16px}
+ .nh-media-picker .media-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
