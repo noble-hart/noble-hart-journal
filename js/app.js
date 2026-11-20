@@ -1103,6 +1103,7 @@ function editorAdmin(){
     try{
       let url=$('#image-url').value.trim();const file=$('#image-upload-file').files[0],alt=$('#image-alt').value.trim(),caption=$('#image-caption').value.trim();
       if(!alt)throw Error('Please add descriptive alternative text.');
+      if(readCrop().ratio!=='original'&&(!cropImg.complete||!cropImg.naturalWidth))throw Error('Wait for the image preview to load before saving its crop.');
       if(file){
         if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024)throw Error('Choose JPG, PNG or WebP under 5 MB.');
         const key=mediaUploadName(file);
