@@ -215,9 +215,18 @@ const paragraphs = body => {
 
 // HTML gift-guide support: sanitize on import, preview and public rendering.
 const RICH_HTML_PREFIX='<!--NH_RICH_HTML_V1-->';
-const richTags=new Set(['P','H2','H3','H4','STRONG','B','EM','I','U','S','STRIKE','CODE','A','UL','OL','LI','BLOCKQUOTE','BR','HR','DIV','SPAN','TABLE','THEAD','TBODY','TR','TH','TD','FIGURE','FIGCAPTION','IMG']);
-const richClasses=new Set(['nh-kicker','nh-check','nh-reference','nh-table-wrap','nh-note','nh-eyebrow','journal-inline-figure','nh-img-left','nh-img-right','nh-img-center','nh-img-full','nh-img-w25','nh-img-w40','nh-img-w50','nh-img-w75','nh-img-w100','nh-align-left','nh-align-center','nh-align-right']);
-const droppedTags=new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','FORM','INPUT','BUTTON','SELECT','TEXTAREA','SVG','MATH','LINK','META','BASE','TEMPLATE','NOSCRIPT','VIDEO','AUDIO','CANVAS']);
+const richTags=new Set(['P','H2','H3','H4','STRONG','B','EM','I','U','S','STRIKE','CODE','A','UL','OL','LI','BLOCKQUOTE','BR','HR','DIV','SPAN','TABLE','THEAD','TBODY','TR','TH','TD','FIGURE','FIGCAPTION','IMG','DETAILS','SUMMARY','VIDEO','IFRAME']);
+const richClasses=new Set(['nh-kicker','nh-check','nh-reference','nh-table-wrap','nh-note','nh-eyebrow','journal-inline-figure','nh-img-left','nh-img-right','nh-img-center','nh-img-full','nh-img-w25','nh-img-w40','nh-img-w50','nh-img-w75','nh-img-w100','nh-align-left','nh-align-center','nh-align-right','nh-video','nh-faq']);
+const droppedTags=new Set(['SCRIPT','STYLE','OBJECT','EMBED','FORM','INPUT','BUTTON','SELECT','TEXTAREA','SVG','MATH','LINK','META','BASE','TEMPLATE','NOSCRIPT','AUDIO','CANVAS']);
+function safeVideoURL(raw){
+ try{const u=new URL(raw);if(u.protocol!=='https:'||u.username||u.password)return null;
+ const h=u.hostname.toLowerCase();let id='';
+ if(h==='youtu.be')id=u.pathname.split('/')[1];
+ if(['youtube.com','www.youtube.com','m.youtube.com','www.youtube-nocookie.com','youtube-nocookie.com'].includes(h))id=u.searchParams.get('v')||u.pathname.match(/^\/(?:embed|shorts)\/([^/]+)/)?.[1]||'';
+ if(/^[\w-]{11}$/.test(id))return {kind:'embed',url:'https://www.youtube-nocookie.com/embed/'+id};
+ if(/\.(mp4|webm)$/i.test(u.pathname))return {kind:'file',url:u.href};
+ }catch{}return null;
+}
 function sanitizeArticleHTML(source){
   const parsed=new DOMParser().parseFromString(String(source||''),'text/html');
   const target=document.createElement('div'),root=parsed.body.querySelector('article')||parsed.body;
@@ -245,7 +254,15 @@ function sanitizeArticleHTML(source){
         }catch{}
       }
       if(tag==='TH'&&['row','col'].includes(node.getAttribute('scope')))el.setAttribute('scope',node.getAttribute('scope'));
-      if(tag==='IMG'){
+      if(tag==='DETAILS'){el.classList.add('nh-faq')}
+       if(tag==='VIDEO'||tag==='IFRAME'){
+         const v=safeVideoURL(node.getAttribute('src')||'');
+         if(!v|| (tag==='VIDEO'&&v.kind!=='file')||(tag==='IFRAME'&&v.kind!=='embed'))return;
+         el.setAttribute('src',v.url);el.classList.add('nh-video');
+         if(tag==='VIDEO'){el.setAttribute('controls','');el.setAttribute('playsinline','');el.setAttribute('preload','metadata')}
+         else{el.setAttribute('title','YouTube video');el.setAttribute('loading','lazy');el.setAttribute('allowfullscreen','');el.setAttribute('referrerpolicy','strict-origin-when-cross-origin');el.setAttribute('sandbox','allow-scripts allow-same-origin allow-presentation')}
+       }
+       if(tag==='IMG'){
         const src=safeArticleImageURL(node.getAttribute('src')||'');
         if(!src)return; // Reject data:, javascript:, relative and malformed image sources.
         el.setAttribute('src',src);
@@ -807,7 +824,7 @@ function editorAdmin(){
         <button type="button" id="open-link-dialog" title="Insert a link in selected text">🔗 Link</button>
         <button type="button" id="open-image-dialog" title="Insert an image into the article">▣ Image</button>
         <button type="button" data-visual-command="justifyLeft" title="Align text left">Align left</button><button type="button" data-visual-command="justifyCenter" title="Center text">Center</button><button type="button" data-visual-command="justifyRight" title="Align text right">Align right</button>
-        <button type="button" id="insert-table">Table</button><button type="button" id="insert-callout">Callout</button>
+        <button type="button" id="insert-faq">FAQ ▾</button><button type="button" id="insert-video">▶ Video</button><button type="button" id="insert-table">Table</button><button type="button" id="insert-callout">Callout</button>
         <button type="button" data-visual-command="undo">Undo</button><button type="button" data-visual-command="redo">Redo</button>
         <button type="button" id="toggle-preview" aria-pressed="false">Preview</button>
       </div>
@@ -815,11 +832,14 @@ function editorAdmin(){
       <textarea id="postbody" class="field editor-body" name="body">${esc(p.body||'')}</textarea>
       <div class="editor-preview article-body" id="editor-preview" hidden></div></div>
     </div>
-    <label class="full">Featured image URL<input class="field" name="cover_url" type="url" value="${esc(p.cover_url||'')}"><small class="muted">Use Media Library to copy a previous image URL. <button type="button" class="inline-media-link" id="open-media">Open Media Library</button></small></label>
+    <label class="full">Featured image URL<input class="field" name="cover_url" type="url" value="${esc(p.cover_url||'')}"><small class="muted">Choose an uploaded image or paste a URL. <button type="button" class="inline-media-link" id="open-media">Choose from Media Library</button></small></label>
     <label class="full">Image alternative text<input class="field" name="cover_alt" value="${esc(p.cover_alt||'')}"></label>
     <section class="full publishing-seo" aria-labelledby="seo-heading"><div class="seo-heading"><div><h2 id="seo-heading">SEO & search appearance</h2><p class="mini muted">Suggestions use your article content. Existing manual values are protected.</p></div><button class="btn ghost small" type="button" id="generate-seo">Generate suggestions</button></div><label>SEO title<input class="field" name="seo_title" value="${esc(p.seo_title||'')}"><small class="muted" id="seo-title-count"></small></label><label>SEO description<textarea class="field" name="seo_description" rows="3">${esc(p.seo_description||'')}</textarea><small class="muted" id="seo-description-count"></small></label><p class="mini muted" id="seo-feedback" role="status"></p><div class="seo-result-preview"><small class="muted">Illustrative Google search preview</small><div id="seo-preview-url"></div><div id="seo-preview-title"></div><p id="seo-preview-description"></p></div></section>
     </div><div class="actions"><button class="btn" type="submit">${p.id?'Save changes':'Create article'}</button><button type="button" class="btn ghost" id="cancel">Cancel</button></div><div id="saveinfo" role="status" aria-live="polite"></div></form></div>
-    <dialog id="image-dialog" class="journal-modal"><form id="image-form"><h2>Insert image in article</h2><p class="mini muted">Place the cursor where the image should appear. Upload a new image or paste a Media Library image URL.</p><label>Upload image (optional)<input class="field" id="image-upload-file" type="file" accept="image/jpeg,image/png,image/webp"></label><label>Image URL<input class="field" id="image-url" type="url" placeholder="https://..."></label><label>Alternative text<input class="field" id="image-alt" maxlength="250" required placeholder="Describe the image for accessibility"></label><label>Caption (optional)<input class="field" id="image-caption" maxlength="240" placeholder="An optional caption below the image"></label><label>Image layout<select class="field" id="image-layout"><option value="center">Centered (text above and below)</option><option value="left">Left (text wraps on right)</option><option value="right">Right (text wraps on left)</option><option value="full">Full width</option></select></label><label>Image width<select class="field" id="image-width"><option value="25">25%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="75">75%</option><option value="100">100%</option></select></label><div class="link-dialog-actions"><button class="btn ghost" id="cancel-image" type="button">Cancel</button><button class="btn" id="insert-image" type="submit">Insert image</button></div><p class="link-error" id="image-error" role="alert"></p></form></dialog>
+    <dialog id="image-dialog" class="journal-modal"><form id="image-form"><h2>Insert image in article</h2><p class="mini muted">Place the cursor where the image should appear. Upload a new image or paste a Media Library image URL.</p><label>Upload image (optional)<input class="field" id="image-upload-file" type="file" accept="image/jpeg,image/png,image/webp"></label><label>Image URL<input class="field" id="image-url" type="url" placeholder="https://..."></label><button type="button" class="btn ghost small" id="pick-inline-image">Choose uploaded image</button><label>Alternative text<input class="field" id="image-alt" maxlength="250" required placeholder="Describe the image for accessibility"></label><label>Caption (optional)<input class="field" id="image-caption" maxlength="240" placeholder="An optional caption below the image"></label><label>Image layout<select class="field" id="image-layout"><option value="center">Centered (text above and below)</option><option value="left">Left (text wraps on right)</option><option value="right">Right (text wraps on left)</option><option value="full">Full width</option></select></label><label>Image width<select class="field" id="image-width"><option value="25">25%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="75">75%</option><option value="100">100%</option></select></label><div class="link-dialog-actions"><button class="btn ghost" id="cancel-image" type="button">Cancel</button><button class="btn" id="insert-image" type="submit">Insert image</button></div><p class="link-error" id="image-error" role="alert"></p></form></dialog>
+    <dialog id="media-picker" class="journal-modal nh-media-picker"><h2>Choose an uploaded image</h2><input class="field" id="picker-search" type="search" placeholder="Search filenames…" aria-label="Search filenames"><p id="picker-status" role="status" class="mini muted"></p><div id="picker-grid" class="media-grid"></div><button id="picker-more" type="button" class="btn ghost" hidden>Load more</button><button id="picker-close" type="button" class="btn ghost">Close</button></dialog>
+    <dialog id="faq-dialog" class="journal-modal"><form id="faq-form"><h2>Insert FAQ dropdown</h2><label>Question<input class="field" id="faq-question" required maxlength="300"></label><label>Answer<textarea class="field" id="faq-answer" required></textarea></label><div class="actions"><button type="button" class="btn ghost" id="faq-cancel">Cancel</button><button class="btn" type="submit">Insert FAQ</button></div></form></dialog>
+    <dialog id="video-dialog" class="journal-modal"><form id="video-form"><h2>Insert video</h2><label>Video URL (YouTube or HTTPS MP4/WebM)<input class="field" id="video-url" type="url"></label><label>Or upload MP4/WebM (up to 50 MB)<input class="field" id="video-file" type="file" accept="video/mp4,video/webm"></label><label>Caption (optional)<input class="field" id="video-caption" maxlength="240"></label><p id="video-error" role="alert"></p><div class="actions"><button type="button" class="btn ghost" id="video-cancel">Cancel</button><button class="btn" id="video-submit" type="submit">Insert video</button></div></form></dialog>
     <dialog id="table-dialog" class="journal-modal"><form id="table-form"><h2>Insert comparison table</h2><label>Columns<input class="field" id="table-columns" type="number" min="2" max="8" value="3" required></label><label>Data rows<input class="field" id="table-rows" type="number" min="1" max="20" value="3" required></label><div class="link-dialog-actions"><button class="btn ghost" type="button" id="cancel-table">Cancel</button><button class="btn" type="submit">Insert table</button></div></form></dialog>
     <dialog id="link-dialog" class="journal-modal"><form id="link-form"><h2>Insert a link</h2><p class="muted">Selected text becomes a clickable link in your article.</p><label>Text to display<input class="field" id="link-text" required maxlength="300"></label><label>Link URL<input class="field" id="link-url" type="url" placeholder="https://example.com" required></label><div class="link-dialog-actions"><button class="btn ghost" id="paste-link" type="button">⧉ Paste URL</button><button class="btn ghost" id="cancel-link" type="button">Cancel</button><button class="btn" type="submit">Insert link</button></div><p class="link-error" id="link-error" role="alert"></p></form></dialog>`;
   const body=$('#postbody'),preview=$('#editor-preview'),visual=$('#visual-body');
@@ -875,7 +895,7 @@ function editorAdmin(){
     body.setRangeText(markup,a,b,'end');body.focus();
   };
   document.querySelectorAll('[data-editor-mode]').forEach(b=>b.onclick=()=>setEditorMode(b.dataset.editorMode));
-  document.querySelectorAll('[data-format],[data-visual-command],#open-link-dialog,#open-image-dialog,#insert-table,#insert-callout').forEach(b=>b.addEventListener('mousedown',e=>{if(editorMode==='visual'){rememberSelection();e.preventDefault()}}));
+  document.querySelectorAll('[data-format],[data-visual-command],#open-link-dialog,#open-image-dialog,#insert-table,#insert-callout,#insert-faq,#insert-video').forEach(b=>b.addEventListener('mousedown',e=>{if(editorMode==='visual'){rememberSelection();e.preventDefault()}}));
   document.querySelectorAll('[data-visual-command]').forEach(b=>b.onclick=()=>command(b.dataset.visualCommand));
   const form=$('#postform'),titleField=form.elements.namedItem('title'),slugField=form.elements.namedItem('slug'),excerptField=form.elements.namedItem('excerpt'),seoTitleField=form.elements.namedItem('seo_title'),seoDescField=form.elements.namedItem('seo_description');
   const autoValues=new Map(),manualFields=new Set();
@@ -951,7 +971,25 @@ function editorAdmin(){
     finally{importing=false;input.disabled=false;input.value='';save.disabled=false}
   };
   displaySEO();
-  $('#open-media').onclick=()=>{if(confirm('Leave the editor? Unsaved changes will be lost. Save your draft first.')){state.view='media';drawAdmin()}};
+  const picker=$('#media-picker');let pickerTarget=null,pickerItems=[],pickerOffset=0,pickerDone=false,pickerLoading=false;
+  const drawPicker=()=>{
+    const q=$('#picker-search').value.toLowerCase();
+    $('#picker-grid').innerHTML=pickerItems.filter(x=>x.label.toLowerCase().includes(q)||x.name.toLowerCase().includes(q)).map(x=>'<button type="button" class="media-item nh-picker-item" data-pick="'+esc(x.name)+'"><img loading="lazy" src="'+esc(mediaURL(x.name))+'" alt=""><span>'+esc(x.label)+'</span></button>').join('')||'<p>No matching images.</p>';
+    $('#picker-grid').querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{pickerTarget.value=mediaURL(b.dataset.pick);pickerTarget.dispatchEvent(new Event('change',{bubbles:true}));picker.close();pickerTarget.focus()});
+  };
+  async function loadPicker(){
+    if(pickerDone||pickerLoading)return;pickerLoading=true;$('#picker-more').disabled=true;$('#picker-status').textContent='Loading images…';
+    try{const {data,error:err}=await db.storage.from('journal-images').list('',{limit:100,offset:pickerOffset,sortBy:{column:'created_at',order:'desc'}});if(err)throw err;
+    const labels=await mediaLabels();pickerItems.push(...(data||[]).filter(x=>x.id).map(x=>({...x,label:labels[x.name]||x.name})));pickerOffset+=(data||[]).length;pickerDone=(data||[]).length<100;$('#picker-more').hidden=pickerDone;$('#picker-status').textContent=pickerItems.length+' images loaded';drawPicker();
+    }catch(err){$('#picker-status').textContent=err.message||'Unable to load images.'}finally{pickerLoading=false;$('#picker-more').disabled=false}
+  }
+  const openPicker=target=>{if(picker.open)return;pickerTarget=target;picker.showModal();if(!pickerItems.length)loadPicker();else drawPicker()};
+  const coverField=form.elements.namedItem('cover_url');
+  $('#open-media').onclick=()=>openPicker(coverField);
+  $('#pick-inline-image').onclick=()=>openPicker($('#image-url'));
+  coverField.addEventListener('click',()=>openPicker(coverField));
+  $('#image-url').addEventListener('click',()=>openPicker($('#image-url')));
+  $('#picker-close').onclick=()=>picker.close();$('#picker-more').onclick=loadPicker;$('#picker-search').oninput=drawPicker;
   const insertFormat=type=>{
     if(editorMode==='visual'){
       const cmds={bold:['bold'],italic:['italic'],h2:['formatBlock','h2'],h3:['formatBlock','h3'],quote:['formatBlock','blockquote'],bullets:['insertUnorderedList'],numbered:['insertOrderedList']};
@@ -1019,7 +1057,7 @@ function editorAdmin(){
       if(!alt)throw Error('Please add descriptive alternative text.');
       if(file){
         if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024)throw Error('Choose JPG, PNG or WebP under 5 MB.');
-        const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type],key=crypto.randomUUID()+'.'+ext;
+        const key=mediaUploadName(file);
         const {error:uploadError}=await db.storage.from('journal-images').upload(key,file,{contentType:file.type});
         if(uploadError)throw Error('Upload failed: '+uploadError.message);
         url=db.storage.from('journal-images').getPublicUrl(key).data.publicUrl;
@@ -1044,6 +1082,21 @@ function editorAdmin(){
     }catch(err){imageError.textContent=err.message||'Could not insert image.'}
     finally{submit.disabled=false;if(!imageDialog.open)selectedFigure=null}
   };
+  const faqDialog=$('#faq-dialog'),videoDialog=$('#video-dialog');
+  $('#insert-faq').onclick=()=>{rememberSelection();$('#faq-form').reset();faqDialog.showModal()};
+  $('#faq-cancel').onclick=()=>faqDialog.close();
+  $('#faq-form').onsubmit=e=>{e.preventDefault();const q=$('#faq-question').value.trim(),a=$('#faq-answer').value.trim();if(!q||!a)return;faqDialog.close();insertRich('<details class="nh-faq"><summary>'+esc(q)+'</summary><p>'+esc(a).replace(/\n/g,'<br>')+'</p></details><p><br></p>')};
+  $('#insert-video').onclick=()=>{rememberSelection();$('#video-form').reset();$('#video-error').textContent='';videoDialog.showModal()};
+  $('#video-cancel').onclick=()=>videoDialog.close();
+  $('#video-form').onsubmit=async e=>{e.preventDefault();const btn=$('#video-submit');btn.disabled=true;$('#video-error').textContent='';
+    try{let url=$('#video-url').value.trim();const f=$('#video-file').files[0];
+      if(f){if(!['video/mp4','video/webm'].includes(f.type)||f.size>50*1024*1024)throw Error('Choose MP4 or WebM under 50 MB.');
+        const key=mediaUploadName(f);const {error:err}=await db.storage.from('journal-videos').upload(key,f,{contentType:f.type});if(err)throw Error('Video upload failed: '+err.message+' (Video storage setup may be required.)');url=db.storage.from('journal-videos').getPublicUrl(key).data.publicUrl}
+      const v=safeVideoURL(url);if(!v)throw Error('Enter a YouTube link or a direct HTTPS MP4/WebM link.');
+      const media=v.kind==='embed'?'<iframe src="'+esc(v.url)+'"></iframe>':'<video src="'+esc(v.url)+'" controls playsinline></video>';
+      const caption=$('#video-caption').value.trim();videoDialog.close();insertRich('<figure class="nh-video">'+media+(caption?'<figcaption>'+esc(caption)+'</figcaption>':'')+'</figure><p><br></p>');
+    }catch(err){$('#video-error').textContent=err.message||'Could not insert video.'}finally{btn.disabled=false}
+  };
   const tableDialog=$('#table-dialog');
   $('#insert-table').onclick=()=>{rememberSelection();tableDialog.showModal()};
   $('#cancel-table').onclick=()=>tableDialog.close();
@@ -1060,7 +1113,7 @@ function editorAdmin(){
   if(titleField.value.trim()||body.value.trim())suggestSEO();
   $('#cancel').onclick=()=>{state.view='posts';drawAdmin()};
   $('#postform').onsubmit=async e=>{
-    e.preventDefault();if(importing)return;if(editorMode==='visual')syncVisual();suggestSEO();if(!body.value.trim()||!cleanedBody().replace(/<[^>]*>/g,'').trim()&&!/<img\b/i.test(cleanedBody())){$('#saveinfo').innerHTML=error('Please add article content.');return}const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
+    e.preventDefault();if(importing)return;if(editorMode==='visual')syncVisual();suggestSEO();if(!body.value.trim()||!cleanedBody().replace(/<[^>]*>/g,'').trim()&&!/<(?:img|video|iframe)\b/i.test(cleanedBody())){$('#saveinfo').innerHTML=error('Please add article content.');return}const f=new FormData(e.target),obj=Object.fromEntries(f.entries());
     if(isRich())obj.body=RICH_HTML_PREFIX+cleanedBody();
     obj.slug=slug(obj.slug||obj.title);if(!obj.slug)return;
     obj.published_at=obj.status==='published'?(p.published_at||new Date().toISOString()):null;
@@ -1132,17 +1185,25 @@ function categoriesAdmin(){
  $('#category-cancel').onclick=()=>dialog.close();
  $('#category-form').onsubmit=async e=>{e.preventDefault();const name=$('#new-category').value.trim();if(!name){$('#category-error').textContent='Enter a category name.';return}if(name===old){dialog.close();return}if(cats.some(c=>c.toLowerCase()===name.toLowerCase())){$('#category-error').textContent='That category already exists.';return}const button=e.target.querySelector('[type=submit]');button.disabled=true;const {error:err}=await db.from('posts').update({category:name}).eq('category',old);if(err){$('#category-error').textContent=err.message;button.disabled=false;return}dialog.close();await loadAdmin();drawAdmin()};
 }
+function mediaURL(name){return db.storage.from('journal-images').getPublicUrl(name).data.publicUrl}
+function mediaUploadName(file,requested=''){
+ const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','video/mp4':'mp4','video/webm':'webm'})[file.type];
+ const name=(requested||file.name).replace(/\.[^.]+$/,'').normalize('NFKD').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,100)||'media';
+ return name+'.'+ext;
+}
+async function mediaLabels(){const {data,error:err}=await db.from('journal_media_labels').select('object_name,label');if(err)return {};return Object.fromEntries((data||[]).map(x=>[x.object_name,x.label]))}
 async function mediaAdmin(){
  const area=$('#adminbody');
- area.innerHTML=`<div class="panel"><div class="media-top"><div><h2>Your Media Library</h2><p>Upload and reuse images across your Journal. Use Copy URL to insert a previously uploaded image.</p></div><div><input type="file" id="file" accept="image/jpeg,image/png,image/webp"><button class="btn" id="upload" type="button">Upload image</button></div></div><div id="uploadmsg" role="status"></div><input class="field" type="search" id="media-search" placeholder="Search filenames…" aria-label="Search uploaded images"><div id="media-status" class="muted" role="status"></div><div id="media-grid" class="media-grid"></div><button class="btn ghost" id="media-more" type="button" hidden>Load more</button></div>`;
- const grid=$('#media-grid'),more=$('#media-more'),info=$('#media-status');let offset=0;let collected=[];let done=false;
- function draw(){const q=$('#media-search').value.trim().toLowerCase();const items=collected.filter(x=>x.name.toLowerCase().includes(q));grid.innerHTML=items.map(x=>{
+ area.innerHTML=`<div class="panel"><div class="media-top"><div><h2>Your Media Library</h2><p>Upload and reuse images across your Journal. Choose descriptive filenames when uploading; rename existing library labels without breaking their URLs.</p></div><div><input type="file" id="file" accept="image/jpeg,image/png,image/webp"><input class="field" id="upload-name" placeholder="Filename (optional)" aria-label="Image filename"><button class="btn" id="upload" type="button">Upload image</button></div></div><div id="uploadmsg" role="status"></div><input class="field" type="search" id="media-search" placeholder="Search filenames…" aria-label="Search uploaded images"><div id="media-status" class="muted" role="status"></div><div id="media-grid" class="media-grid"></div><button class="btn ghost" id="media-more" type="button" hidden>Load more</button></div>`;
+ const grid=$('#media-grid'),more=$('#media-more'),info=$('#media-status');let offset=0;let collected=[];let done=false;let labels=await mediaLabels();
+ function draw(){const q=$('#media-search').value.trim().toLowerCase();const items=collected.filter(x=>(labels[x.name]||x.name).toLowerCase().includes(q)||x.name.toLowerCase().includes(q));grid.innerHTML=items.map(x=>{
    const url=db.storage.from('journal-images').getPublicUrl(x.name).data.publicUrl;
-   return `<div class="media-item"><img loading="lazy" src="${esc(url)}" alt="Uploaded image ${esc(x.name)}"><div class="media-item-info"><strong title="${esc(x.name)}">${esc(x.name)}</strong><small>${esc(date(x.created_at))}</small><div class="media-actions"><button class="btn small ghost" data-copy="${esc(url)}" type="button">⧉ Copy URL</button><button class="btn small ghost" data-download="${esc(x.name)}" type="button">↓ Download</button><button class="btn small danger" data-delete-media="${esc(x.name)}" type="button" title="Delete image permanently">🗑 Delete</button></div></div></div>`
+   return `<div class="media-item"><img loading="lazy" src="${esc(url)}" alt="Uploaded image ${esc(x.name)}"><div class="media-item-info"><strong title="${esc(x.name)}">${esc(labels[x.name]||x.name)}</strong><small>${esc(date(x.created_at))}</small><div class="media-actions"><button class="btn small ghost" data-copy="${esc(url)}" type="button">⧉ Copy URL</button><button class="btn small ghost" data-download="${esc(x.name)}" type="button">↓ Download</button><button class="btn small ghost" data-rename-media="${esc(x.name)}" type="button">Rename</button><button class="btn small danger" data-delete-media="${esc(x.name)}" type="button" title="Delete image permanently">🗑 Delete</button></div></div></div>`
  }).join('')||'<p class="muted">No images match. Upload your first image or change the search.</p>';
  grid.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.copy);const t=b.textContent;b.textContent='✓ Copied';setTimeout(()=>b.textContent=t,1500)}catch{info.textContent='Clipboard unavailable. You can copy the URL from the browser address when the image opens.'}});
- grid.querySelectorAll('[data-download]').forEach(b=>b.onclick=async()=>{b.disabled=true;const {data,error:err}=await db.storage.from('journal-images').download(b.dataset.download);if(err){info.textContent='Download failed: '+err.message}else{const url=URL.createObjectURL(data),a=document.createElement('a');a.href=url;a.download=b.dataset.download;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}b.disabled=false});
-  grid.querySelectorAll('[data-delete-media]').forEach(b=>b.onclick=async()=>{
+ grid.querySelectorAll('[data-download]').forEach(b=>b.onclick=async()=>{b.disabled=true;const {data,error:err}=await db.storage.from('journal-images').download(b.dataset.download);if(err){info.textContent='Download failed: '+err.message}else{const url=URL.createObjectURL(data),a=document.createElement('a');a.href=url;a.download=labels[b.dataset.download]||b.dataset.download;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}b.disabled=false});
+  grid.querySelectorAll('[data-rename-media]').forEach(b=>b.onclick=async()=>{const name=b.dataset.renameMedia,ext=name.split('.').pop();const input=prompt('New filename (the existing public URL will stay unchanged)',labels[name]||name);if(input===null)return;const base=input.trim().replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,100);if(!base){info.textContent='Enter a valid filename.';return}const label=base+'.'+ext;if(collected.some(x=>x.name!==name&&(labels[x.name]||x.name).toLowerCase()===label.toLowerCase())){info.textContent='That filename is already used.';return}b.disabled=true;const {error:err}=await db.from('journal_media_labels').upsert({object_name:name,label});if(err){info.textContent='Rename failed: '+err.message+' (Media labels setup may be required.)';b.disabled=false;return}labels[name]=label;info.textContent='Renamed in Media Library; public URL unchanged.';draw()});
+   grid.querySelectorAll('[data-delete-media]').forEach(b=>b.onclick=async()=>{
     const name=b.dataset.deleteMedia;const imgUrl=db.storage.from('journal-images').getPublicUrl(name).data.publicUrl;
     const used=state.posts.filter(p=>p.cover_url===imgUrl||String(p.body||'').includes(imgUrl));
     if(used.length){info.textContent=`This image is used in ${used.length} article(s), either as a featured or inline image. Remove those references before deleting it.`;return}
@@ -1154,7 +1215,7 @@ async function mediaAdmin(){
  }
  async function fetchMore(){if(done)return;more.disabled=true;info.textContent='Loading images…';const {data,error:err}=await db.storage.from('journal-images').list('',{limit:100,offset,sortBy:{column:'created_at',order:'desc'}});if(err){info.textContent='Unable to load library: '+err.message;more.disabled=false;return}const batch=(data||[]).filter(x=>x.name&&!x.name.endsWith('/'));collected=[...collected,...batch];offset+=(data||[]).length;done=(data||[]).length<100;more.hidden=done;more.disabled=false;info.textContent=collected.length+' image(s) loaded';draw()}
  more.onclick=fetchMore;$('#media-search').oninput=draw;
- $('#upload').onclick=async()=>{const file=$('#file').files[0];if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024){$('#uploadmsg').innerHTML=error('Use JPG, PNG or WebP under 5 MB.');return}const ext=file.name.split('.').pop().toLowerCase(),path=`${crypto.randomUUID()}.${ext}`;$('#upload').disabled=true;const {error:err}=await db.storage.from('journal-images').upload(path,file,{contentType:file.type});$('#upload').disabled=false;if(err){$('#uploadmsg').innerHTML=error(err.message);return}const {data}=db.storage.from('journal-images').getPublicUrl(path);$('#uploadmsg').innerHTML=status('Uploaded! URL: '+data.publicUrl);collected=[];offset=0;done=false;$('#file').value='';await fetchMore()};
+ $('#upload').onclick=async()=>{const file=$('#file').files[0];if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024){$('#uploadmsg').innerHTML=error('Use JPG, PNG or WebP under 5 MB.');return}const path=mediaUploadName(file,$('#upload-name').value.trim());$('#upload').disabled=true;const {error:err}=await db.storage.from('journal-images').upload(path,file,{contentType:file.type});$('#upload').disabled=false;if(err){$('#uploadmsg').innerHTML=error(err.message);return}const {data}=db.storage.from('journal-images').getPublicUrl(path);$('#uploadmsg').innerHTML=status('Uploaded! URL: '+data.publicUrl);collected=[];offset=0;done=false;$('#file').value='';$('#upload-name').value='';await fetchMore()};
  await fetchMore();
 }
 async function signout(){await db.auth.signOut();state.session=null;state.admin=false;state.view='overview';render()}
