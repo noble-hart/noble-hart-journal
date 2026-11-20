@@ -228,12 +228,14 @@ function safeVideoURL(raw){
  }catch{}return null;
 }
 const cropRatios={'1:1':'1 / 1','4:3':'4 / 3','3:2':'3 / 2','16:9':'16 / 9','2:3':'2 / 3','4:5':'4 / 5','9:16':'9 / 16'};
-function cropSettings(ratio,zoom,x,y){
+function cropSettings(ratio,zoom,x,y,mode='legacy',base=1){
  const clamp=(v,min,max,fallback)=>v!=null&&v!==''&&Number.isFinite(Number(v))?Math.min(max,Math.max(min,Number(v))):fallback;
- return {ratio:Object.hasOwn(cropRatios,ratio)?ratio:'original',zoom:clamp(zoom,1,3,1),x:clamp(x,0,100,50),y:clamp(y,0,100,50)};
+ mode=['fit','fill','legacy'].includes(mode)?mode:'legacy';
+ return {ratio:Object.hasOwn(cropRatios,ratio)?ratio:'original',mode,base:mode==='fill'?clamp(base,1,1000,1):1,zoom:clamp(zoom,mode==='legacy'?1:0.25,3,1),x:clamp(x,0,100,50),y:clamp(y,0,100,50)};
 }
 function applyCrop(el,c){
  el.style.setProperty('--crop-ratio',cropRatios[c.ratio]||'auto');
+ el.dataset.cropMode=c.mode;el.dataset.cropBase=String(c.base);el.style.setProperty('--crop-scale',String(c.zoom*c.base));el.style.setProperty('--crop-pan-x',((c.x-50)*2)+'%');el.style.setProperty('--crop-pan-y',((c.y-50)*2)+'%');
  el.style.setProperty('--crop-zoom',String(c.zoom));el.style.setProperty('--crop-x',c.x+'%');el.style.setProperty('--crop-y',c.y+'%');
 }
 function sanitizeArticleHTML(source){
@@ -263,7 +265,7 @@ function sanitizeArticleHTML(source){
         }catch{}
       }
       if(tag==='TH'&&['row','col'].includes(node.getAttribute('scope')))el.setAttribute('scope',node.getAttribute('scope'));
-      if(tag==='DIV'&&classes.includes('nh-image-crop')){const c=cropSettings(node.dataset.cropRatio,node.dataset.cropZoom,node.dataset.cropX,node.dataset.cropY);if(c.ratio==='original'){el.classList.remove('nh-image-crop')}else{Object.assign(el.dataset,{cropRatio:c.ratio,cropZoom:String(c.zoom),cropX:String(c.x),cropY:String(c.y)});applyCrop(el,c)}}
+      if(tag==='DIV'&&classes.includes('nh-image-crop')){const c=cropSettings(node.dataset.cropRatio,node.dataset.cropZoom,node.dataset.cropX,node.dataset.cropY,node.dataset.cropMode,node.dataset.cropBase);if(c.ratio==='original'){el.classList.remove('nh-image-crop')}else{Object.assign(el.dataset,{cropRatio:c.ratio,cropZoom:String(c.zoom),cropX:String(c.x),cropY:String(c.y)});applyCrop(el,c)}}
        if(tag==='DETAILS'){el.classList.add('nh-faq')}
        if(tag==='VIDEO'||tag==='IFRAME'){
          const v=safeVideoURL(node.getAttribute('src')||'');
@@ -846,7 +848,7 @@ function editorAdmin(){
     <label class="full">Image alternative text<input class="field" name="cover_alt" value="${esc(p.cover_alt||'')}"></label>
     <section class="full publishing-seo" aria-labelledby="seo-heading"><div class="seo-heading"><div><h2 id="seo-heading">SEO & search appearance</h2><p class="mini muted">Suggestions use your article content. Existing manual values are protected.</p></div><button class="btn ghost small" type="button" id="generate-seo">Generate suggestions</button></div><label>SEO title<input class="field" name="seo_title" value="${esc(p.seo_title||'')}"><small class="muted" id="seo-title-count"></small></label><label>SEO description<textarea class="field" name="seo_description" rows="3">${esc(p.seo_description||'')}</textarea><small class="muted" id="seo-description-count"></small></label><p class="mini muted" id="seo-feedback" role="status"></p><div class="seo-result-preview"><small class="muted">Illustrative Google search preview</small><div id="seo-preview-url"></div><div id="seo-preview-title"></div><p id="seo-preview-description"></p></div></section>
     </div><div class="actions"><button class="btn" type="submit">${p.id?'Save changes':'Create article'}</button><button type="button" class="btn ghost" id="cancel">Cancel</button></div><div id="saveinfo" role="status" aria-live="polite"></div></form></div>
-    <dialog id="image-dialog" class="journal-modal"><form id="image-form"><h2>Insert image in article</h2><p class="mini muted">Place the cursor where the image should appear. Upload a new image or paste a Media Library image URL.</p><label>Upload image (optional)<input class="field" id="image-upload-file" type="file" accept="image/jpeg,image/png,image/webp"></label><label>Image URL<input class="field" id="image-url" type="url" placeholder="https://..."></label><button type="button" class="btn ghost small" id="pick-inline-image">Choose uploaded image</button><fieldset class="nh-crop-controls"><legend>Crop &amp; zoom (optional)</legend><label>Aspect ratio<select class="field" id="crop-ratio"><option value="original">Original / no crop</option><option>1:1</option><option>4:3</option><option>3:2</option><option>16:9</option><option>2:3</option><option>4:5</option><option>9:16</option></select></label><div id="crop-preview" class="nh-crop-preview" hidden><img id="crop-preview-img" alt="Image crop preview"></div><p id="crop-status" class="mini muted" role="status"></p><label>Zoom <output id="crop-zoom-value">1.0×</output><input id="crop-zoom" type="range" min="1" max="3" step="0.05" value="1" disabled></label><label>Horizontal focus<input id="crop-x" type="range" min="0" max="100" value="50" disabled></label><label>Vertical focus<input id="crop-y" type="range" min="0" max="100" value="50" disabled></label><button class="btn ghost small" type="button" id="crop-reset">Reset crop</button><small class="muted">Choose a ratio, zoom, and move the focus sliders. Your original image stays unchanged.</small></fieldset><label>Alternative text<input class="field" id="image-alt" maxlength="250" required placeholder="Describe the image for accessibility"></label><label>Caption (optional)<input class="field" id="image-caption" maxlength="240" placeholder="An optional caption below the image"></label><label>Image layout<select class="field" id="image-layout"><option value="center">Centered (text above and below)</option><option value="left">Left (text wraps on right)</option><option value="right">Right (text wraps on left)</option><option value="full">Full width</option></select></label><label>Image width<select class="field" id="image-width"><option value="25">25%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="75">75%</option><option value="100">100%</option></select></label><div class="link-dialog-actions"><button class="btn ghost" id="cancel-image" type="button">Cancel</button><button class="btn" id="insert-image" type="submit">Insert image</button></div><p class="link-error" id="image-error" role="alert"></p></form></dialog>
+    <dialog id="image-dialog" class="journal-modal"><form id="image-form"><h2>Insert image in article</h2><p class="mini muted">Place the cursor where the image should appear. Upload a new image or paste a Media Library image URL.</p><label>Upload image (optional)<input class="field" id="image-upload-file" type="file" accept="image/jpeg,image/png,image/webp"></label><label>Image URL<input class="field" id="image-url" type="url" placeholder="https://..."></label><button type="button" class="btn ghost small" id="pick-inline-image">Choose uploaded image</button><fieldset class="nh-crop-controls"><legend>Crop &amp; zoom (optional)</legend><label>Aspect ratio<select class="field" id="crop-ratio"><option value="original">Original / no crop</option><option>1:1</option><option>4:3</option><option>3:2</option><option>16:9</option><option>2:3</option><option>4:5</option><option>9:16</option></select></label><div id="crop-preview" class="nh-crop-preview" tabindex="0" role="group" aria-label="Image frame preview. Drag or use arrow keys to reposition." hidden><img id="crop-preview-img" draggable="false" alt="Image crop preview"></div><p id="crop-status" class="mini muted" role="status"></p><label>Zoom <output id="crop-zoom-value">100%</output><input id="crop-zoom" type="range" min="0.25" max="3" step="0.01" value="1" disabled></label><div class="nh-crop-buttons"><button class="btn ghost small" type="button" id="crop-fit">Fit image</button><button class="btn ghost small" type="button" id="crop-fill">Fill frame</button><button class="btn ghost small" type="button" id="crop-reset">Reset</button></div><small class="muted">Drag the image with your mouse or finger, or use arrow keys on the preview. Zoom out to reveal white padding. Your original image stays unchanged.</small></fieldset><label>Alternative text<input class="field" id="image-alt" maxlength="250" required placeholder="Describe the image for accessibility"></label><label>Caption (optional)<input class="field" id="image-caption" maxlength="240" placeholder="An optional caption below the image"></label><label>Image layout<select class="field" id="image-layout"><option value="center">Centered (text above and below)</option><option value="left">Left (text wraps on right)</option><option value="right">Right (text wraps on left)</option><option value="full">Full width</option></select></label><label>Image width<select class="field" id="image-width"><option value="25">25%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="75">75%</option><option value="100">100%</option></select></label><div class="link-dialog-actions"><button class="btn ghost" id="cancel-image" type="button">Cancel</button><button class="btn" id="insert-image" type="submit">Insert image</button></div><p class="link-error" id="image-error" role="alert"></p></form></dialog>
     <dialog id="media-picker" class="journal-modal nh-media-picker"><h2>Choose an uploaded image</h2><input class="field" id="picker-search" type="search" placeholder="Search filenames…" aria-label="Search filenames"><p id="picker-status" role="status" class="mini muted"></p><div id="picker-grid" class="media-grid"></div><button id="picker-more" type="button" class="btn ghost" hidden>Load more</button><button id="picker-close" type="button" class="btn ghost">Close</button></dialog>
     <dialog id="faq-dialog" class="journal-modal"><form id="faq-form"><h2>Insert FAQ dropdown</h2><label>Question<input class="field" id="faq-question" required maxlength="300"></label><label>Answer<textarea class="field" id="faq-answer" required></textarea></label><div class="actions"><button type="button" class="btn ghost" id="faq-cancel">Cancel</button><button class="btn" type="submit">Insert FAQ</button></div></form></dialog>
     <dialog id="video-dialog" class="journal-modal"><form id="video-form"><h2>Insert video</h2><label>Video URL (YouTube or HTTPS MP4/WebM)<input class="field" id="video-url" type="url"></label><label>Or upload MP4/WebM (up to 50 MB)<input class="field" id="video-file" type="file" accept="video/mp4,video/webm"></label><label>Caption (optional)<input class="field" id="video-caption" maxlength="240"></label><p id="video-error" role="alert"></p><div class="actions"><button type="button" class="btn ghost" id="video-cancel">Cancel</button><button class="btn" id="video-submit" type="submit">Insert video</button></div></form></dialog>
@@ -1044,9 +1046,23 @@ function editorAdmin(){
   const imageDialog=$('#image-dialog');let imageInsertStart=0,imageInsertEnd=0,selectedFigure=null;
   let cropObjectURL='';
   const cropPreview=$('#crop-preview'),cropImg=$('#crop-preview-img');
-  const readCrop=()=>cropSettings($('#crop-ratio').value,$('#crop-zoom').value,$('#crop-x').value,$('#crop-y').value);
-  function setCrop(c){$('#crop-ratio').value=c.ratio;$('#crop-zoom').value=c.zoom;$('#crop-x').value=c.x;$('#crop-y').value=c.y;drawCrop()}
-  function drawCrop(){const c=readCrop(),active=c.ratio!=='original';cropPreview.classList.toggle('nh-image-crop',active);applyCrop(cropPreview,c);$('#crop-zoom-value').textContent=c.zoom.toFixed(2)+'×';for(const id of ['crop-zoom','crop-x','crop-y'])$('#'+id).disabled=!active}
+  let cropMode='fit',cropX=50,cropY=50,cropBase=1,drag=null;
+  const readCrop=()=>cropSettings($('#crop-ratio').value,$('#crop-zoom').value,cropX,cropY,cropMode,cropBase);
+  function setCrop(c){cropMode=c.mode;cropBase=c.base;cropX=c.x;cropY=c.y;$('#crop-ratio').value=c.ratio;$('#crop-zoom').value=c.zoom;drawCrop()}
+  function drawCrop(){const ratio=$('#crop-ratio').value;if(cropMode==='fill'&&cropImg.complete&&cropImg.naturalWidth&&cropImg.naturalHeight&&cropRatios[ratio]){const [w,h]=ratio.split(':').map(Number),relative=(cropImg.naturalWidth/cropImg.naturalHeight)/(w/h);cropBase=Math.max(relative,1/relative)}const c=readCrop(),active=c.ratio!=='original';cropPreview.classList.toggle('nh-image-crop',active);applyCrop(cropPreview,c);$('#crop-zoom-value').textContent=Math.round(c.zoom*100)+'%';for(const id of ['crop-zoom','crop-fit','crop-fill','crop-reset'])$('#'+id).disabled=!active;$('#crop-fit').setAttribute('aria-pressed',String(c.mode==='fit'));$('#crop-fill').setAttribute('aria-pressed',String(c.mode==='fill'))}
+  function convertLegacy(){
+    if(cropMode!=='legacy')return;
+    const c=readCrop(),w=cropPreview.clientWidth,h=cropPreview.clientHeight,iw=cropImg.naturalWidth,ih=cropImg.naturalHeight;
+    if(w&&h&&iw&&ih){const factor=Math.max(w/iw,h/ih)*c.zoom;cropX=Math.max(0,Math.min(100,50+(0.5-c.x/100)*(iw*factor-w)/w*50));cropY=Math.max(0,Math.min(100,50+(0.5-c.y/100)*(ih*factor-h)/h*50))}
+    cropMode='fill';
+  }
+  function panCrop(dx,dy){convertLegacy();cropX=Math.max(0,Math.min(100,cropX+dx));cropY=Math.max(0,Math.min(100,cropY+dy));drawCrop()}
+  cropPreview.addEventListener('pointerdown',e=>{if(readCrop().ratio==='original'||e.button!==0||drag)return;const w=cropPreview.clientWidth,h=cropPreview.clientHeight;if(!w||!h)return;e.preventDefault();convertLegacy();drag={id:e.pointerId,x:e.clientX,y:e.clientY,w,h};cropPreview.setPointerCapture(e.pointerId);cropPreview.classList.add('is-dragging')});
+  cropPreview.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;panCrop((e.clientX-drag.x)/drag.w*50,(e.clientY-drag.y)/drag.h*50);drag.x=e.clientX;drag.y=e.clientY});
+  function endDrag(e){if(drag&&drag.id===e.pointerId){drag=null;cropPreview.classList.remove('is-dragging')}}
+  for(const event of ['pointerup','pointercancel','lostpointercapture'])cropPreview.addEventListener(event,endDrag);
+  cropPreview.addEventListener('keydown',e=>{if(readCrop().ratio==='original')return;const dirs={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};if(!dirs[e.key])return;e.preventDefault();const [x,y]=dirs[e.key];panCrop(x*(e.shiftKey?5:1),y*(e.shiftKey?5:1))});
+  function resetFrame(mode){setCrop(cropSettings($('#crop-ratio').value,1,50,50,mode))}
   function clearCropObject(){if(cropObjectURL){URL.revokeObjectURL(cropObjectURL);cropObjectURL=''}}
   function previewCropSource(){
     clearCropObject();const file=$('#image-upload-file').files[0];const src=file?(cropObjectURL=URL.createObjectURL(file)):safeArticleImageURL($('#image-url').value.trim());
@@ -1054,17 +1070,20 @@ function editorAdmin(){
     if(src)cropImg.src=src;else cropImg.removeAttribute('src');
     drawCrop();
   }
-  cropImg.onload=()=>{cropPreview.hidden=false;$('#crop-status').textContent=''};
+  cropImg.onload=()=>{cropPreview.hidden=false;$('#crop-status').textContent='';drawCrop()};
   cropImg.onerror=()=>{cropPreview.hidden=true;$('#crop-status').textContent='Preview unavailable; check the image URL.'};
-  for(const id of ['crop-ratio','crop-zoom','crop-x','crop-y'])$('#'+id).addEventListener('input',drawCrop);
-  $('#crop-reset').onclick=()=>setCrop(cropSettings('original'));
+  $('#crop-ratio').addEventListener('change',()=>resetFrame('fit'));
+  $('#crop-zoom').addEventListener('input',()=>{convertLegacy();drawCrop()});
+  $('#crop-fit').onclick=()=>resetFrame('fit');
+  $('#crop-fill').onclick=()=>resetFrame('fill');
+  $('#crop-reset').onclick=()=>resetFrame('fit');
   $('#image-url').addEventListener('change',()=>{$('#image-upload-file').value='';previewCropSource()});
   $('#image-upload-file').addEventListener('change',previewCropSource);
   imageDialog.addEventListener('close',()=>{clearCropObject();cropImg.removeAttribute('src');cropPreview.hidden=true});
   $('#open-image-dialog').onclick=()=>{
     rememberSelection();imageInsertStart=body.selectionStart;imageInsertEnd=body.selectionEnd;
     $('#image-error').textContent='';$('#image-url').value='';$('#image-upload-file').value='';$('#image-alt').value='';$('#image-caption').value='';$('#image-layout').value='center';$('#image-width').value='50';
-    selectedFigure=null;$('#insert-image').textContent='Insert image';setCrop(cropSettings('original'));previewCropSource();
+    selectedFigure=null;$('#insert-image').textContent='Insert image';setCrop(cropSettings('original',1,50,50,'fit'));previewCropSource();
     imageDialog.showModal();
   };
   visual.addEventListener('click',e=>{
@@ -1075,7 +1094,7 @@ function editorAdmin(){
     $('#image-alt').value=img.getAttribute('alt')||'';$('#image-caption').value=figure.querySelector('figcaption')?.textContent||'';
     $('#image-layout').value=['left','right','center','full'].find(x=>figure.classList.contains('nh-img-'+x))||'center';
     $('#image-width').value=['25','40','50','75','100'].find(x=>figure.classList.contains('nh-img-w'+x))||'100';
-    const crop=img.closest('.nh-image-crop');setCrop(cropSettings(crop?.dataset.cropRatio,crop?.dataset.cropZoom,crop?.dataset.cropX,crop?.dataset.cropY));previewCropSource();$('#insert-image').textContent='Update image';imageDialog.showModal();
+    const crop=img.closest('.nh-image-crop');setCrop(cropSettings(crop?.dataset.cropRatio,crop?.dataset.cropZoom,crop?.dataset.cropX,crop?.dataset.cropY,crop?crop.dataset.cropMode:'fit',crop?.dataset.cropBase));previewCropSource();$('#insert-image').textContent='Update image';imageDialog.showModal();
   });
   $('#cancel-image').onclick=()=>imageDialog.close();
   $('#image-layout').onchange=e=>{if(e.target.value==='full')$('#image-width').value='100';else if(['left','right'].includes(e.target.value))$('#image-width').value='40'};
@@ -1084,6 +1103,7 @@ function editorAdmin(){
     try{
       let url=$('#image-url').value.trim();const file=$('#image-upload-file').files[0],alt=$('#image-alt').value.trim(),caption=$('#image-caption').value.trim();
       if(!alt)throw Error('Please add descriptive alternative text.');
+      if(readCrop().ratio!=='original'&&(!cropImg.complete||!cropImg.naturalWidth))throw Error('Wait for the image preview to load before saving its crop.');
       if(file){
         if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024)throw Error('Choose JPG, PNG or WebP under 5 MB.');
         const key=mediaUploadName(file);
@@ -1095,7 +1115,7 @@ function editorAdmin(){
       const layout=$('#image-layout').value,requestedWidth=$('#image-width').value;
       if(!['left','right','center','full'].includes(layout)||!['25','40','50','75','100'].includes(requestedWidth))throw Error('Choose an available image layout and width.');
       const width=layout==='full'?'100':(['left','right'].includes(layout)&&Number(requestedWidth)>50?'50':requestedWidth);
-      const c=readCrop(),imgMarkup='<img src="'+esc(safe)+'" alt="'+esc(alt)+'" loading="lazy">',cropped=c.ratio==='original'?imgMarkup:'<div class="nh-image-crop" data-crop-ratio="'+esc(c.ratio)+'" data-crop-zoom="'+c.zoom+'" data-crop-x="'+c.x+'" data-crop-y="'+c.y+'">'+imgMarkup+'</div>';
+      const c=readCrop(),imgMarkup='<img src="'+esc(safe)+'" alt="'+esc(alt)+'" loading="lazy">',cropped=c.ratio==='original'?imgMarkup:'<div class="nh-image-crop" data-crop-ratio="'+esc(c.ratio)+'" data-crop-mode="'+c.mode+'" data-crop-base="'+c.base+'" data-crop-zoom="'+c.zoom+'" data-crop-x="'+c.x+'" data-crop-y="'+c.y+'">'+imgMarkup+'</div>';
       const markup='<figure class="journal-inline-figure nh-img-'+layout+' nh-img-w'+width+'">'+cropped+(caption?'<figcaption>'+esc(caption)+'</figcaption>':'')+'</figure>';
       if(selectedFigure&&visual.contains(selectedFigure)){
         const t=document.createElement('template');t.innerHTML=sanitizeArticleHTML(markup);selectedFigure.replaceWith(t.content);visualDirty=true;imageDialog.close();visual.focus();

@@ -363,3 +363,18 @@ a.card:hover, a.card:focus-visible {
 .article-body .nh-image-crop>img,.nh-crop-preview.nh-image-crop>img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:cover;object-position:var(--crop-x) var(--crop-y);transform:scale(var(--crop-zoom));transform-origin:var(--crop-x) var(--crop-y);margin:0;border-radius:0}
 .comment-avatar.comment-avatar-author{background:#fff;border:1px solid var(--line);overflow:hidden}
 .comment-avatar.comment-avatar-author img{width:100%;height:100%;object-fit:contain;display:block;padding:2px}
+
+/* Image frame editor: fit preserves the complete source, fill crops it.
+   Legacy crops keep their previous object-position and transform rules. */
+.nh-image-crop[data-crop-mode="fit"],.nh-image-crop[data-crop-mode="fill"]{background:#fff}
+.article-body .nh-image-crop[data-crop-mode="fit"]>img,.nh-crop-preview.nh-image-crop[data-crop-mode="fit"]>img,
+.article-body .nh-image-crop[data-crop-mode="fill"]>img,.nh-crop-preview.nh-image-crop[data-crop-mode="fill"]>img{
+ object-position:center;transform-origin:center;transform:translate(var(--crop-pan-x,0%),var(--crop-pan-y,0%)) scale(var(--crop-scale,1));object-fit:contain;
+}
+
+.nh-crop-preview.nh-image-crop{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;outline:1px solid #dce5ed;outline-offset:0}
+.nh-crop-preview.nh-image-crop.is-dragging{cursor:grabbing}
+.nh-crop-preview.nh-image-crop img{pointer-events:none}
+.nh-crop-preview:focus-visible{outline:3px solid #517c9e;outline-offset:3px}
+.nh-crop-buttons{display:flex;flex-wrap:wrap;gap:8px}
+.nh-crop-buttons button[aria-pressed="true"]{background:var(--navy);color:white}
