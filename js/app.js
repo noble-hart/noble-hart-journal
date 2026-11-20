@@ -743,7 +743,7 @@ async function initialize(){
   if(!edgeRendered) render();
   if(!configured) return;
   try {
-    const {createClient} = await import('https://esm.sh/@supabase/supabase-js@2.49.4');
+    const {createClient} = await import('https://esm.sh/@supabase/supabase-js@2.102.0');
     db=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{detectSessionInUrl:true}});
     // Public routes fetch only required records; do not preload every article body.
     const {data:authData,error:authError}=await db.auth.getSession();
@@ -1186,20 +1186,45 @@ function commentsAdmin(){
  });
  document.querySelectorAll('[data-status]').forEach(b=>b.onclick=async()=>{const res=b.dataset.status==='delete'?await db.from('comments').delete().eq('id',b.dataset.id):await db.from('comments').update({status:b.dataset.status}).eq('id',b.dataset.id);if(res.error)alert(res.error.message);else{await loadAdmin();drawAdmin()}})
 }
-function accountAdmin(){
+async function accountAdmin(){
   const area=$('#adminbody');
-  area.innerHTML=`<div class="panel"><h2>Administrator password</h2><p class="muted">Set a password on your existing Supabase administrator account. Your existing magic-link login remains available as a backup.</p><p class="mini">Signed in as ${esc(state.session?.user?.email||'')}</p>
-    <form id="account-password-form"><label>New password<input class="field" type="password" id="account-new-password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+  area.innerHTML='<div class="panel"><h2>Administrator password</h2><p role="status">Checking password status…</p></div>';
+  const {data:hasPassword,error:checkError}=await db.rpc('journal_admin_has_password');
+  if(state.view!=='account'||$('#adminbody')!==area)return;
+  if(checkError||typeof hasPassword!=='boolean'){
+    area.innerHTML='<div class="panel"><h2>Administrator password</h2><p role="alert">Password status could not be verified. Run the administrator password status migration or reload the page. No password can be changed until verification succeeds.</p></div>';
+    return;
+  }
+  area.innerHTML=`<div class="panel"><h2>${hasPassword?'Change administrator password':'Set administrator password'}</h2><p class="muted">${hasPassword?'Verify your current password before choosing a new one.':'Create your first password for this administrator account.'} Your magic-link login remains available.</p><p class="mini">Signed in as ${esc(state.session?.user?.email||'')}</p>
+    <form id="account-password-form">
+    ${hasPassword?'<label>Current password<input class="field" type="password" id="account-current-password" autocomplete="current-password" required></label>':''}
+    <label>New password<input class="field" type="password" id="account-new-password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
     <label>Confirm new password<input class="field" type="password" id="account-password-confirm" minlength="12" maxlength="128" autocomplete="new-password" required></label>
-    <div class="actions"><button class="btn" type="submit">Save password</button></div></form><div id="account-password-status" role="status" aria-live="polite"></div>
-    <p class="mini muted">Use a unique password of at least 12 characters. Supabase may ask you to sign in again if your session needs reauthentication. Never put passwords in the website source or GitHub.</p></div>`;
+    <div class="actions"><button class="btn" type="submit">${hasPassword?'Change password':'Set password'}</button></div></form><div id="account-password-status" role="status" aria-live="polite"></div>
+    <p class="mini muted">Choose a unique password of at least 12 characters. If you forgot your password, use the account recovery process in Supabase. Never share passwords or enter them in GitHub.</p></div>`;
   $('#account-password-form').onsubmit=async e=>{
-    e.preventDefault();const password=$('#account-new-password').value,confirm=$('#account-password-confirm').value;
-    if(password!==confirm){$('#account-password-status').innerHTML=error('Passwords do not match.');return}
-    const btn=e.currentTarget.querySelector('[type="submit"]');btn.disabled=true;
-    const {error:err}=await db.auth.updateUser({password});
-    $('#account-password-status').innerHTML=err?error(err.message):status('Password saved. You can use email and password next time you sign in.');
-    if(!err)e.currentTarget.reset();btn.disabled=false;
+    e.preventDefault();const form=e.currentTarget,feedback=$('#account-password-status'),password=$('#account-new-password').value,confirm=$('#account-password-confirm').value,current=$('#account-current-password')?.value||'';
+    if(password!==confirm){feedback.innerHTML=error('Passwords do not match.');return}
+    if(hasPassword&&(!current||current===password)){feedback.innerHTML=error('Enter your current password and choose a different new password.');return}
+    const btn=form.querySelector('[type="submit"]');btn.disabled=true;feedback.textContent='Verifying…';
+    try{
+      const {data:latest,error:check}=await db.rpc('journal_admin_has_password');
+      if(check||latest!==hasPassword)throw Error('Password status changed. Reload this page and try again.');
+      if(hasPassword){
+        // Verify even if server-side current-password enforcement has not yet been enabled.
+        // Isolated non-persistent client avoids replacing the administrator's existing session.
+        const {createClient}=await import('https://esm.sh/@supabase/supabase-js@2.102.0');
+        const verifier=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+        const {data:verified,error:verifyError}=await verifier.auth.signInWithPassword({email:state.session?.user?.email,password:current});
+        if(verifyError||verified.user?.id!==state.session?.user?.id){if(verified.session)await verifier.auth.signOut({scope:'local'});throw Error('Current password could not be verified. Check it and try again.')}
+        await verifier.auth.signOut({scope:'local'});
+      }
+      const {error:err}=await db.auth.updateUser(hasPassword?{password,current_password:current}:{password});
+      if(err)throw Error(err.message);
+      form.reset();
+      if($('#adminbody')===area&&state.view==='account'){await accountAdmin();const msg=$('#account-password-status');if(msg)msg.innerHTML=status('Password successfully '+(hasPassword?'changed':'set')+'.')}
+    }catch(err){feedback.innerHTML=error(err.message||'Password update failed.');}
+    finally{const old=form.querySelector('#account-current-password');if(old)old.value='';btn.disabled=false}
   };
 }
 function likesAdmin(){
