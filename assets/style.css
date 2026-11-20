@@ -398,3 +398,78 @@ a.card:hover, a.card:focus-visible {
 .nh-feedback-dialog .reply-status{margin:8px 0;font-size:.9rem}
 .nh-admin-engagement{white-space:nowrap;line-height:1.65}
 @media(max-width:600px){.nh-feedback-dialog{margin:auto 0 0;width:100%;max-width:100%;max-height:88dvh;border-radius:18px 18px 0 0;padding:20px;box-sizing:border-box}.nh-feedback-dialog h2{font-size:1.4rem}}
+
+
+/* Gentle reader-feedback reveal: article content remains usable until the delay ends. */
+@keyframes nhFeedbackFadeRise{
+ from{opacity:0;transform:translate3d(0,18px,0)}
+ to{opacity:1;transform:translate3d(0,0,0)}
+}
+@keyframes nhFeedbackFadeOut{
+ from{opacity:1;transform:translate3d(0,0,0)}
+ to{opacity:0;transform:translate3d(0,8px,0)}
+}
+@keyframes nhFeedbackBackdropIn{
+ from{background:rgba(12,27,30,0)}
+ to{background:rgba(12,27,30,.38)}
+}
+@keyframes nhFeedbackBackdropOut{
+ from{background:rgba(12,27,30,.38)}
+ to{background:rgba(12,27,30,0)}
+}
+.nh-feedback-dialog{
+ width:min(500px,calc(100vw - 32px));
+ max-width:calc(100vw - 32px);
+ max-height:min(90dvh,calc(100vh - 24px));
+ box-sizing:border-box;
+ overflow-y:auto;
+ overflow-x:hidden;
+ overscroll-behavior:contain;
+}
+.nh-feedback-dialog[open]:not(.nh-feedback-closing){
+ animation:nhFeedbackFadeRise 500ms cubic-bezier(.22,1,.36,1) both;
+}
+.nh-feedback-dialog[open]::backdrop{
+ background:rgba(12,27,30,.38);
+ animation:nhFeedbackBackdropIn 500ms ease-out both;
+}
+.nh-feedback-dialog[open].nh-feedback-closing{
+ animation:nhFeedbackFadeOut 200ms ease-in both;
+}
+.nh-feedback-dialog[open].nh-feedback-closing::backdrop{
+ animation:nhFeedbackBackdropOut 200ms ease-in both;
+}
+.nh-feedback-dialog .field,
+.nh-feedback-dialog textarea,
+.nh-feedback-dialog .comment-form-grid{max-width:100%;min-width:0;box-sizing:border-box}
+.nh-feedback-dialog textarea.field{resize:vertical}
+@media(max-width:600px){
+ @keyframes nhFeedbackFadeRise{
+  from{opacity:0;transform:translate3d(0,32px,0)}
+  to{opacity:1;transform:translate3d(0,0,0)}
+ }
+ .nh-feedback-dialog{
+  position:fixed;
+  inset:auto 0 0;
+  margin:0;
+  width:100%;
+  max-width:100%;
+  max-height:88dvh;
+  padding:18px 18px max(18px,env(safe-area-inset-bottom));
+  border-radius:20px 20px 0 0;
+ }
+}
+@media(max-width:360px){
+ .nh-feedback-dialog{padding:14px 14px max(14px,env(safe-area-inset-bottom))}
+ .nh-feedback-dialog h2{font-size:1.3rem}
+ .nh-stars{gap:0}
+ .nh-stars button{min-width:42px;font-size:28px}
+}
+@media(prefers-reduced-motion:reduce){
+ .nh-feedback-dialog[open],
+ .nh-feedback-dialog[open]::backdrop{
+  animation:none!important;
+  transition:none!important;
+  transform:none!important;
+ }
+}
