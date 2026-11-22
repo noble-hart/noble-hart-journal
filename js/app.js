@@ -14,7 +14,7 @@ const state={posts:[],cats:[],session:null,admin:false,view:'overview',editing:n
 const status=t=>`<div class="message">${esc(t)}</div>`;
 const error=t=>`<div class="message error">${esc(t)}</div>`;
 const SITE_URL='https://noble-hart-journal.noblehart01.workers.dev';
-const CONTACT_EMAIL='noblehart01@gmail.com';
+const CONTACT_EMAIL='hello.noblehart@gmail.com';
 const absoluteCover = value => {
  const raw=String(value||'').trim();
  if(!raw)return '';
@@ -642,7 +642,7 @@ function wireContactForm(){
    }})});
    if(!r.ok)throw new Error('Delivery unavailable');
    sessionStorage.setItem('nh-contact-last',String(Date.now()));form.reset();msg.textContent='Thank you. Your message has been sent.';
-  }catch(err){console.warn('Contact email failed',err);msg.textContent='We could not send your message. Please email noblehart01@gmail.com directly.'}
+  }catch(err){console.warn('Contact email failed',err);msg.textContent='We could not send your message. Please email hello.noblehart@gmail.com directly.'}
   finally{if(captchaWidgetId!==null)window.grecaptcha?.reset?.(captchaWidgetId);button.disabled=false}
  };
 }
@@ -685,7 +685,7 @@ We are glad you're here. Explore our articles, discover a gift idea, or share a 
  contact:['Contact The Noble Hart Journal',`Have a question, article suggestion, correction or collaboration idea? We'd be glad to hear from you.
 
 ## Get in touch
-**Email:** [noblehart01@gmail.com](mailto:noblehart01@gmail.com)
+**Email:** [hello.noblehart@gmail.com](mailto:hello.noblehart@gmail.com)
 
 For general enquiries, reader feedback, correction requests, potential collaborations and editorial questions, please contact us using the email above.
 
@@ -706,7 +706,7 @@ Thank you for helping us make The Noble Hart Journal more useful.`],
 ## 1. Who we are
 The Noble Hart Journal (“we”, “our” or “the Journal”) publishes articles, gift guides and reader discussions. This Policy explains how personal information is handled when you use our website.
 
-**Contact:** [noblehart01@gmail.com](mailto:noblehart01@gmail.com)
+**Contact:** [hello.noblehart@gmail.com](mailto:hello.noblehart@gmail.com)
 
 ## 2. Information we collect
 **Information you choose to provide:** Your chosen display name and comment or reply text, email address when you request newsletter updates, and information you include in a message sent to us.
@@ -733,7 +733,7 @@ If non-essential tracking or advertising technologies are introduced, we will up
 ## 6. Newsletter requests
 You may voluntarily provide an email address to request updates. ${INTEGRATIONS.brevoSignupUrl?"Subscriptions are processed through our newsletter email provider, which provides sign-up confirmation and unsubscribe arrangements.":"**At present, the website records newsletter requests but does not send newsletters.** Before regular marketing emails begin, we plan to implement confirmation and a functioning unsubscribe mechanism."} We will not treat comments or likes as permission to send marketing emails.
 
-You can ask us to withdraw or remove a newsletter request by contacting [noblehart01@gmail.com](mailto:noblehart01@gmail.com).
+You can ask us to withdraw or remove a newsletter request by contacting [hello.noblehart@gmail.com](mailto:hello.noblehart@gmail.com).
 
 ## 7. Service providers, external links and international processing
 We use third-party services for hosting, storage and website operations. Such providers may process information as required to deliver and protect the service, including potentially in countries outside yours. We seek to apply applicable legal protections to relevant international processing.
@@ -748,13 +748,13 @@ We take reasonable technical and organisational steps to protect information; no
 ## 9. Your rights
 Depending on applicable law, you may have rights to access, correct, delete or restrict processing of your personal information, object to certain uses, withdraw consent or ask for data portability.
 
-To make a request, email [noblehart01@gmail.com](mailto:noblehart01@gmail.com) with **Privacy Request** in the subject line. We may request reasonable verification before responding. Where applicable, you may complain to the Nigeria Data Protection Commission or another competent authority.
+To make a request, email [hello.noblehart@gmail.com](mailto:hello.noblehart@gmail.com) with **Privacy Request** in the subject line. We may request reasonable verification before responding. Where applicable, you may complain to the Nigeria Data Protection Commission or another competent authority.
 
 ## 10. Children's privacy
 The Journal publishes family-friendly content, but its interactive features are not designed to collect information from children under 13 independently. We do not knowingly solicit their personal data through comments or newsletter forms. Parents and guardians should supervise children's online activities.
 
 ## 11. Policy updates
-We may revise this Policy when our features, practices or legal obligations change. The updated date above will show when we last revised it. For questions, contact [noblehart01@gmail.com](mailto:noblehart01@gmail.com).`],
+We may revise this Policy when our features, practices or legal obligations change. The updated date above will show when we last revised it. For questions, contact [hello.noblehart@gmail.com](mailto:hello.noblehart@gmail.com).`],
  disclosure:['Editorial & Affiliate Disclosure',`**Last updated: 15 November 2026**
 
 ## Our commitment
@@ -778,9 +778,9 @@ Prices, availability, specifications, delivery terms and promotional offers may 
 External links are provided for reference and convenience. We do not control external websites or guarantee their information, security or product performance. Our articles are general editorial information and are not a substitute for specialist professional advice where that is appropriate.
 
 ## Corrections and feedback
-If you believe something is inaccurate, out of date or inadequately disclosed, email [noblehart01@gmail.com](mailto:noblehart01@gmail.com). Include the relevant article link and a description of the concern.
+If you believe something is inaccurate, out of date or inadequately disclosed, email [hello.noblehart@gmail.com](mailto:hello.noblehart@gmail.com). Include the relevant article link and a description of the concern.
 
-**Contact:** [noblehart01@gmail.com](mailto:noblehart01@gmail.com)
+**Contact:** [hello.noblehart@gmail.com](mailto:hello.noblehart@gmail.com)
 
 Thank you for supporting The Noble Hart Journal.`]
  };
